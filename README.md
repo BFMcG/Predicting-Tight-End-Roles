@@ -22,4 +22,4 @@ File Order (1 - 5)
 4) Exploratory Data Analysis, only requires that Data Merge.Rmd and Data Cleaning.Rmd are run first. Analyzes the significance of parameters being considered for model training.
 
 ### Model Testing.Rmd
-5) This Rmd only requires that Data Merge and Data Cleaning are run first. In this file, the cleaned data is being trained on several models including Logistic Regression, Elastic Net Regression, Support Vector Machine, Gradient Boosted Tree, and Random Forest
+5) This Rmd only requires that Data Merge.Rmd and Data Cleaning.Rmd are run first. In this file, the cleaned data is being trained on several models including Logistic Regression, Elastic Net Regression, Support Vector Machine, Gradient Boosted Tree, and Random Forest
