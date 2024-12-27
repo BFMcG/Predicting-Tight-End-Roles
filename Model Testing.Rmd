@@ -13,7 +13,7 @@ This Notebook will address
     -   Logistic Regression
     -   Elastic Net Regression
     -   Support Vector Machine
-    -   Gradient Boosted tree
+    -   Gradient Boosted Tree
     -   Random Forest
 
 Load packages
