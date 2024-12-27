@@ -1,0 +1,409 @@
+---
+title: "EDA"
+author: "Brendan McGuinness"
+output: html_document
+---
+
+# EDA
+
+This notebook will address
+
+-   Analyzing significance of parameters
+-   Exploring interactions
+
+Load packages
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+```
+
+Load data
+
+**Replace 'file' with your file directory**
+
+```{r}
+TE_data_c <- read.csv("file/TE data c.csv")
+```
+
+## Graphs
+
+Down and yards to go
+
+```{r}
+first_d <- TE_data_c %>% 
+  filter(down == 1) %>% 
+  filter(yardsToGo != 10)
+
+second_d <- TE_data_c %>% 
+  filter(down == 2)
+
+third_d <- TE_data_c %>% 
+  filter(down == 3)
+
+fourth_d <- TE_data_c %>% 
+  filter(down == 4)
+
+first_TE <- ggplot(data = first_d, aes(x = yardsToGo, fill = TEassignment)) +
+  geom_density(alpha = 0.5)
+
+second_TE <- ggplot(data = second_d, aes(x = yardsToGo, fill = TEassignment)) +
+  geom_density(alpha = 0.5)
+
+third_TE <- ggplot(data = third_d, aes(x = yardsToGo, fill = TEassignment)) +
+  geom_density(alpha = 0.5)
+
+fourth_TE <- ggplot(data = fourth_d, aes(x = yardsToGo, fill = TEassignment)) +
+  geom_density(alpha = 0.5)
+
+grid.arrange(first_TE, second_TE, third_TE, fourth_TE)
+
+# For second down situations the line deciding whether a TE would mostly often block, or run a route, is around 7 yards to go
+# On third and fourth down however, the line decreased to about 3 yards to go
+```
+
+Quarter
+
+```{r}
+ggplot(data = TE_data_c, aes(x = quarter, fill = factor(TEassignment))) +
+  geom_bar(position = "fill") +
+  labs(
+    title = "TE Assignment per quarter",
+    fill = "TE Assignment",
+    y = "Factor",
+    x = "Quarter"
+  )
+
+# Not much of a difference between the quarters, except in the 2nd quarter, TE tend to run more routes
+```
+
+Offensive Formation
+
+```{r}
+ggplot(data = TE_data_c, aes(x = offenseFormation, fill = TEassignment)) +
+  geom_bar() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = "Offensive Formation Distribution",
+    x = "Offensive Formation",
+    y = "Count",
+    fill = "TE Assignment"
+  )
+
+ggplot(data = TE_data_c, aes(x = offenseFormation, fill = factor(TEassignment))) +
+  geom_bar(position = "fill") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = "Factor Offensive Formation",
+    x = "Offensive Formation",
+    y = " Factor Percentage",
+    fill = "TE Assignment"
+  )
+
+# Large dispersion between offensive formation and the TE assignment. When in an Empty or Shotgun formation, TEs more often block while another formation they mostly block
+```
+
+Receiver Alignment
+
+```{r}
+ggplot(data = TE_data_c, aes(x = receiverAlignment, fill = TEassignment)) +
+  geom_bar()
+
+ggplot(data = TE_data_c, aes(x = receiverAlignment, fill = factor(TEassignment))) +
+  geom_bar(position = "fill")
+
+# Only 2x1 and 3x2 have an affect on the TE assignment
+```
+
+Pass Coverage
+
+```{r}
+ggplot(data = TE_data_c, aes(x = pff_passCoverage, fill = TEassignment)) +
+  geom_bar() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(data = TE_data_c, aes(x = pff_passCoverage, fill = factor(TEassignment))) +
+  geom_bar(position = "fill") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# The pass coverage of the offense doesn't play a large role in determining the outcome. Except for goal line and 'other' category, goal line = block, other = route
+```
+
+In motion at ball snap
+
+```{r}
+ggplot(data = TE_data_c, aes(x = inMotionAtBallSnap, fill = TEassignment)) +
+  geom_bar()
+
+ggplot(data = TE_data_c, aes(x = inMotionAtBallSnap, fill = factor(TEassignment))) +
+  geom_bar(position = "fill")
+
+# For the small amount TE that are in motion, it doesn't have a strong affect on TE assignment
+```
+
+Shift
+
+```{r}
+ggplot(data = TE_data_c, aes(x = shiftSinceLineset, fill = TEassignment)) +
+  geom_bar()
+
+ggplot(data = TE_data_c, aes(x = shiftSinceLineset, fill = factor(TEassignment))) +
+  geom_bar(position = "fill")
+
+# Much greater significance that 'in motion' if there was a shift, the TE more often Blocks
+```
+
+Distance from Ball
+
+```{r}
+ggplot(data = TE_data_c, aes(x = DistFromBall_Wid, fill = TEassignment)) +
+  geom_histogram()
+
+ggplot(data = TE_data_c, aes(x = DistFromBall_Wid, fill = factor(TEassignment))) +
+  geom_histogram(position = "fill") +
+  xlim(1.3,25) +
+  labs(
+    title = "Factor Distance From Ball",
+    x = "Yards away from ball",
+    y = "Factor Percentage"
+  )
+
+# If they are less than 5 yards from the ball the TE most often Blocks, Further than 5 yards they run a route most of the time
+```
+
+Distance from ball density plots
+
+```{r}
+ggplot(data = TE_data_c, aes(x = DistFromBall_RB, fill = TEassignment)) +
+  geom_density(alpha = 0.5) +
+  xlim(1,15) +
+  labs(title = "Significance of RB Distance",
+       x = "Running Back Distance from Ball (Yards)",
+       y = "Density",
+       fill = "TE Role") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", size = 20, hjust = 0.5))
+```
+
+Side of ball
+
+```{r}
+ggplot(data = TE_data_c, aes(x = SideBS, fill = TEassignment)) +
+  geom_bar()
+
+ggplot(data = TE_data_c, aes(x = SideBS, fill = factor(TEassignment))) +
+  geom_bar(position = "fill")
+
+# No significance, will remove before modeling
+```
+
+Multiple TE and Number of TE
+
+```{r}
+# multiple TE
+ggplot(data = TE_data_c, aes(x = multipleTE, fill = TEassignment)) +
+  geom_bar()
+
+ggplot(data = TE_data_c, aes(x = multipleTE, fill = factor(TEassignment))) +
+  geom_bar(position = "fill")
+
+# If only one they are more often run a route, if there is more than one, then they more often block
+
+# Number of TEs
+ggplot(data = TE_data_c, aes(x = NumberofTE, fill = TEassignment)) +
+  geom_bar()
+
+ggplot(data = TE_data_c, aes(x = NumberofTE, fill = factor(TEassignment))) +
+  geom_bar(position = "fill")
+
+# 2 and 3 have about the same influence on the TE's assignment. So for my model I'm only going to use 'multipleTE'
+```
+
+TE position
+
+```{r}
+ggplot(data = TE_data_c, aes(x = TEposition, fill = TEassignment)) +
+  geom_bar()
+
+ggplot(data = TE_data_c, aes(x = TEposition, fill = factor(TEassignment))) +
+  geom_bar(position = "fill")
+
+# If not lined up as a TE, far more often runs a route
+# The other position most often block
+```
+
+TE alignment
+
+```{r}
+ggplot(data = TE_data_c, aes(x = TEAlignment, fill = TEassignment)) +
+  geom_bar()
+
+ggplot(data = TE_data_c, aes(x = TEAlignment, fill = factor(TEassignment))) +
+  geom_bar(position = "fill")
+
+# 0x0 most often Route, every other alignment is most often a block
+```
+
+Red zone
+
+```{r}
+ggplot(data = TE_data_c, aes(x = redZone, fill = TEassignment)) +
+  geom_bar()
+
+ggplot(data = TE_data_c, aes(x = redZone, fill = factor(TEassignment))) +
+  geom_bar(position = "fill")
+
+# TEs block slightly more when in the red zone
+```
+
+On the LOS
+
+```{r}
+ggplot(data = TE_data_c, aes(x = OnLOS, fill = TEassignment)) +
+  geom_bar()
+
+ggplot(data = TE_data_c, aes(x = OnLOS, fill = factor(TEassignment))) +
+  geom_bar(position = "fill")
+
+# If on the LOS TE are slightly more often run a route, vise versa when not on the line
+```
+
+Score Differential
+
+```{r}
+
+ggplot(data = TE_data_c, aes(x = scoreDiff, fill = TEassignment)) +
+  geom_histogram()
+
+ggplot(data = TE_data_c, aes(x = scoreDiff, fill = factor(TEassignment))) +
+  geom_histogram(position = "fill") +
+  xlim(-30,30) +
+  labs(
+    title = "Factor Score Differential",
+    x = "Score Differential",
+    y = "Factor Percentage"
+  )
+
+# When behind TEs run routes more, but when ahead, they more often block
+```
+
+Distance from ball vs yards to go
+
+```{r}
+TE_1down <- TE_data_c %>% 
+  filter(down == 1)
+
+TE_2down <- TE_data_c %>% 
+  filter(down == 2)
+
+TE_3down <- TE_data_c %>% 
+  filter(down == 3)
+
+TE_4down <- TE_data_c %>% 
+  filter(down == 4)
+
+point_1 <- ggplot(data = TE_1down, aes(x = DistFromBall_Wid, y = yardsToGo, color = TEassignment)) +
+  geom_point()
+
+point_2 <- ggplot(data = TE_2down, aes(x = DistFromBall_Wid, y = yardsToGo, color = TEassignment)) +
+  geom_point()
+
+point_3 <- ggplot(data = TE_3down, aes(x = DistFromBall_Wid, y = yardsToGo, color = TEassignment)) +
+  geom_point()
+
+point_4 <- ggplot(data = TE_4down, aes(x = DistFromBall_Wid, y = yardsToGo, color = TEassignment)) +
+  geom_point()
+
+grid.arrange(point_1, point_2, point_3, point_4)
+```
+
+RB Distance & RB Distance vs Yards to Go
+
+```{r}
+# RB Distance
+ggplot(data = TE_data_c, aes(x = DistFromBall_RB, fill = TEassignment)) +
+  geom_histogram()
+
+ggplot(data = TE_data_c, aes(x = DistFromBall_RB, fill = factor(TEassignment))) +
+  geom_histogram(position = "fill") +
+  labs(
+    title = "Factor Score Differential",
+    x = "RB Distance",
+    y = "Factor Percentage"
+  )
+
+quar1 <- ggplot(data = TE_1down, aes(x = DistFromBall_RB, y = yardsToGo, color = TEassignment)) +
+  geom_point()
+
+quar2 <- ggplot(data = TE_2down, aes(x = DistFromBall_RB, y = yardsToGo, color = TEassignment)) +
+  geom_point()
+
+quar3 <- ggplot(data = TE_3down, aes(x = DistFromBall_RB, y = yardsToGo, color = TEassignment)) +
+  geom_point()
+
+quar4 <- ggplot(data = TE_4down, aes(x = DistFromBall_RB, y = yardsToGo, color = TEassignment)) +
+  geom_point()
+
+grid.arrange(quar1, quar2, quar3, quar4)
+
+# RB Distance and yards to go
+```
+
+Distance from ball vs Score Differential
+
+```{r}
+# Seperating data by quarter, as well as first and 10 plays
+TE_qtr_1 <- TE_data_c %>% 
+  filter(quarter == 1)
+
+TE_qtr_2 <- TE_data_c %>% 
+  filter(quarter == 2)
+
+TE_qtr_3 <- TE_data_c %>% 
+  filter(quarter == 3)
+
+TE_qtr_4 <- TE_data_c %>% 
+  filter(quarter == 4)
+
+qtr_1 <- ggplot(data = TE_qtr_1, aes(x = DistFromBall_Wid, y = scoreDiff, color = TEassignment)) +
+  geom_point()
+
+qtr_2 <- ggplot(data = TE_qtr_2, aes(x = DistFromBall_Wid, y = scoreDiff, color = TEassignment)) +
+  geom_point()
+
+qtr_3 <- ggplot(data = TE_qtr_3, aes(x = DistFromBall_Wid, y = scoreDiff, color = TEassignment)) +
+  geom_point()
+
+qtr_4 <- ggplot(data = TE_qtr_4, aes(x = DistFromBall_Wid, y = scoreDiff, color = TEassignment)) +
+  geom_point()
+
+grid.arrange(qtr_1, qtr_2, qtr_3, qtr_4)
+```
+
+## Exploring Interactions and Predictor Significance
+
+```{r}
+# Dropping variables that won't be used in the model or aren't worth analyzing
+TE_data_cc <- TE_data_c %>% 
+  select(-c(playDesign, position, DistFromBall_LS, DistFromBall_BS, DistFromLOS, TacklePos, LOS_Tackle, DistFromBall_Tackle, max_s, yard_chg, y_chg, gameTime))
+
+# Changing all character variables into factors
+TE_data_cc <- TE_data_cc %>% 
+  mutate_if(is.character, as.factor)
+
+# Changing downs and quarters into factors
+TE_data_cc <- TE_data_cc %>% 
+  mutate(
+    quarter = as.factor(quarter),
+    down = as.factor(down)
+  )
+```
+
+```{r}
+# Comparing all predictors and possible interactions
+all_glm <- glm(TEassignment ~ . - gameId - playId - nflId - displayName - possessionTeam + down*yardsToGo + quarter*scoreDiff + DistFromBall_Wid*yardsToGo, data = TE_data_cc, family = binomial(link = "logit"))
+anova(all_glm)
+```
+
+After analyzing all of these results, the features: `totalYardsToGo`, `redZone`, `NumberofTE`, `SideBS` won't be used for final modeling. They didn't show a great enough significance and therefore will create unnecessary noise in the model if left in.

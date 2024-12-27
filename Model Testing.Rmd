@@ -1,0 +1,268 @@
+---
+title: "Model Testing"
+author: "Brendan McGuinness"
+output: html_document
+---
+
+# Model Testing
+
+This Notebook will address
+
+-   Which models best fit to the overall TE data using ROC AUC values
+-   Models include:
+    -   Logistic Regression
+    -   Elastic Net Regression
+    -   Support Vector Machine
+    -   Gradient Boosted tree
+    -   Random Forest
+
+Load packages
+
+```{r}
+library(dplyr)
+library(tidymodels)
+library(ranger)
+library(kableExtra)
+library(glmnet)
+library(ranger)
+library(xgboost)
+library(yardstick)
+```
+
+Load data
+
+**Replace 'file' with your file directory**
+
+```{r}
+TE_data_c <- read.csv("file/TE data c.csv")
+```
+
+Feature dropping a data cleaning for model running
+
+```{r}
+TE_data_final <- TE_data_c %>% 
+  select(-c(playDesign, position, x_bs, y_bs, s_bs, x_ls, y_ls, s_ls, x_fb, y_fb, s_fb, DistFromBall_LS, DistFromBall_BS, DistFromLOS, TacklePos, LOS_Tackle, DistFromBall_Tackle, max_s, yard_chg, y_chg, gameTime, possessionTeam, displayName))
+
+# Changing all character variables into factors
+TE_data_final <- TE_data_final %>% 
+  mutate_if(is.character, as.factor)
+
+# Removing features that don't show a strong enough significance to be used in the model
+TE_data_final <- TE_data_final %>% 
+  select(-c(totalYardsToGo, redZone, NumberofTE, SideBS))
+
+# Changing downs and quarters into factors
+TE_data_final <- TE_data_final %>% 
+  mutate(
+    quarter = as.factor(quarter),
+    down = as.factor(down)
+  )
+
+# Changing all logistic variables into factors
+TE_data_final <- TE_data_final %>% 
+  mutate_if(is.logical, as.factor)
+```
+
+## Testing the Models
+
+Splitting Data
+
+```{r}
+set.seed(1142)
+
+# Splitting the data by 80% and stratifying by TEassignment
+TE_split <- initial_split(TE_data_final, prop = 0.80, strata = TEassignment)
+
+TE_train <- training(TE_split)
+TE_test <- testing(TE_split)
+
+# Stratified Sampling
+TE_fold <- vfold_cv(TE_train, v = 5, strata = TEassignment)
+```
+
+Recipe which includes interaction required models
+
+```{r}
+TE_recipe <- recipe(TEassignment ~ ., data = TE_data_final) %>%
+  step_interact(terms = ~ down:yardsToGo + quarter:scoreDiff + yardsToGo:DistFromBall_Wid) %>%
+  step_center(all_numeric_predictors()) %>% 
+  step_scale(all_numeric_predictors()) %>% 
+  step_dummy(all_nominal_predictors())
+
+
+prep(TE_recipe) %>%
+  bake(new_data = TE_train) %>%
+  head() %>%
+  kable() %>% 
+  kable_styling("striped", full_width = F) %>%
+  column_spec(1:32, extra_css = "white-space: nowrap;") %>%
+  row_spec(0, align = "c") %>%
+  scroll_box(width = "100%")
+```
+
+Model setups
+
+```{r}
+# Logistic Regression
+reg_set_TE <- logistic_reg() %>% 
+  set_engine("glm") %>% 
+  set_mode("classification")
+
+# Elastic Net Regression
+net_set_TE <- logistic_reg(
+  mixture = tune(),
+  penalty = tune()) %>% 
+  set_engine("glmnet") %>% 
+  set_mode("classification")
+
+# Support Vector Machine (SVM)
+svm_set_TE <- svm_rbf() %>% 
+  set_engine("kernlab") %>% 
+  set_mode("classification")
+
+# Random Forest
+rf_set_TE <- rand_forest(
+  mtry = tune(),
+  trees = tune(),
+  min_n = tune()) %>% 
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("classification")
+
+# Gradient Boosted Tree
+gbt_set_TE <- boost_tree(
+  mtry = tune(),
+  trees = tune(),
+  learn_rate = tune()) %>% 
+  set_engine("xgboost") %>% 
+  set_mode("classification")
+```
+
+Work flows
+
+```{r}
+reg_wflow_TE <- workflow() %>% 
+  add_model(reg_set_TE) %>% 
+  add_recipe(TE_recipe)
+
+net_wflow_TE <- workflow() %>% 
+  add_model(net_set_TE) %>% 
+  add_recipe(TE_recipe)
+
+svm_wflow_TE <- workflow() %>% 
+  add_model(svm_set_TE) %>% 
+  add_recipe(TE_recipe)
+
+rf_wflow_TE <- workflow() %>% 
+  add_model(rf_set_TE) %>% 
+  add_recipe(TE_recipe)
+
+gbt_wflow_TE <- workflow() %>% 
+  add_model(gbt_set_TE) %>% 
+  add_recipe(TE_recipe)
+```
+
+Grids
+
+```{r}
+net_grid_TE <- grid_regular(penalty(),
+                         mixture(range = c(0,1)),
+                         levels = 10)
+
+rf_grid_TE <- grid_regular(mtry(range = c(2,10)),
+                             trees(range = c(200, 1000)),
+                             min_n(range = c(2, 10)),
+                             levels = 5)
+
+gbt_grid_TE <- grid_regular(mtry(range = c(1,5)), 
+                        trees(range = c(200, 1000)),
+                        learn_rate(range = c(0.1, 0.3)),
+                        levels = 5)
+```
+
+Tuning
+
+```{r}
+set.seed(1142)
+
+net_tune_TE <- tune_grid(
+  net_wflow_TE,
+  resamples = TE_fold,
+  grid = net_grid_TE
+)
+
+rf_tune_TE <- tune_grid(
+  rf_wflow_TE,
+  resamples = TE_fold,
+  grid = rf_grid_TE
+)
+
+gbt_tune_TE <- tune_grid(
+  gbt_wflow_TE,
+  resamples = TE_fold,
+  grid = gbt_grid_TE
+)
+```
+
+Plots
+
+```{r}
+autoplot(net_tune_TE, metric = "roc_auc")
+autoplot(rf_tune_TE, metric = "roc_auc")
+autoplot(gbt_tune_TE, metric = "roc_auc")
+```
+
+Non-tuning models
+
+```{r}
+# Logistic Regression
+reg_auc_TE <- TE_fold %>%
+  mutate(
+    fit = map(splits, ~ fit(reg_wflow_TE, data = analysis(.))),
+    
+    augmented = map2(fit, splits, ~ augment(.x, new_data = assessment(.y))),
+    
+    roc_auc = map(augmented, ~ roc_auc(.x, truth = TEassignment, .pred_Block))
+  ) %>%
+  select(roc_auc) %>%
+  unnest(cols = c(roc_auc))
+
+reg_auc_TE <- reg_auc_TE %>%
+  group_by(.metric, .estimator) %>% 
+  summarize(mean = mean(.estimate)) %>% 
+  ungroup()
+
+# SVM
+svm_auc_TE <- TE_fold %>%
+  mutate(
+    fit = map(splits, ~ fit(svm_wflow_TE, data = analysis(.))),
+    
+    augmented = map2(fit, splits, ~ augment(.x, new_data = assessment(.y))),
+    
+    roc_auc = map(augmented, ~ roc_auc(.x, truth = TEassignment, .pred_Block))
+  ) %>%
+  select(roc_auc) %>%
+  unnest(cols = c(roc_auc))
+
+svm_auc_TE <- svm_auc_TE %>%
+  group_by(.metric, .estimator) %>% 
+  summarize(mean = mean(.estimate)) %>% 
+  ungroup()
+```
+
+Best of tuned models
+
+```{r}
+best_net_TE <- show_best(net_tune_TE, metric = "roc_auc", n = 1)
+best_rf_TE <- show_best(rf_tune_TE, metric = "roc_auc", n = 1)
+best_gbt_TE <- show_best(gbt_tune_TE, metric = "roc_auc", n = 1)
+```
+
+Results between the 5 Models
+
+```{r}
+model_vector <- c('SVM', 'Logistic Regression', 'Random Forest', 'Gradient Boosted Tree', 'Elastic Net')
+roc_results_TE <- bind_rows(svm_auc_TE, reg_auc_TE, best_rf_TE, best_gbt_TE, best_net_TE)
+roc_results_TE$Models <- model_vector
+roc_results_TE <- roc_results_TE[, c('Models', '.metric', 'mean')]
+roc_results_TE[order(-roc_results_TE$mean), ]
+```

@@ -1,0 +1,190 @@
+---
+title: "Data Merging"
+author: "Brendan McGuinness"
+date: "2024-12-23"
+output: html_document
+---
+
+# Loading and Merging Data Sets
+
+
+```{r}
+library(dplyr)
+```
+
+This notebook does the following:
+
+  - Loads the raw data
+  
+  - Merges the data for feature engineering
+
+*After downloading the raw data files from Kaggle, replace `file` with your data directory*
+```{r}
+games <- read.csv("file/games.csv")
+player_play <- read.csv("file/player_play.csv")
+players <- read.csv("file/players.csv")
+plays <- read.csv("file/plays.csv")
+tracking_week_1 <- read.csv("file/tracking_week_1.csv")
+tracking_week_2 <- read.csv("file/tracking_week_2.csv")
+tracking_week_3 <- read.csv("file/tracking_week_3.csv")
+tracking_week_4 <- read.csv("file/tracking_week_4.csv")
+tracking_week_5 <- read.csv("file/tracking_week_5.csv")
+tracking_week_6 <- read.csv("file/tracking_week_6.csv")
+tracking_week_7 <- read.csv("file/tracking_week_7.csv")
+tracking_week_8 <- read.csv("file/tracking_week_8.csv")
+tracking_week_9 <- read.csv("file/tracking_week_9.csv")
+```
+
+```{r}
+games <- read.csv("/Users/brend/OneDrive/Documents/Data Bowl/Data/games.csv")
+player_play <- read.csv("/Users/brend/OneDrive/Documents/Data Bowl/Data/player_play.csv")
+players <- read.csv("/Users/brend/OneDrive/Documents/Data Bowl/Data/players.csv")
+plays <- read.csv("/Users/brend/OneDrive/Documents/Data Bowl/Data/plays.csv")
+tracking_week_1 <- read.csv("/Users/brend/OneDrive/Documents/Data Bowl/Data/tracking_week_1.csv")
+tracking_week_2 <- read.csv("/Users/brend/OneDrive/Documents/Data Bowl/Data/tracking_week_2.csv")
+tracking_week_3 <- read.csv("/Users/brend/OneDrive/Documents/Data Bowl/Data/tracking_week_3.csv")
+tracking_week_4 <- read.csv("/Users/brend/OneDrive/Documents/Data Bowl/Data/tracking_week_4.csv")
+tracking_week_5 <- read.csv("/Users/brend/OneDrive/Documents/Data Bowl/Data/tracking_week_5.csv")
+tracking_week_6 <- read.csv("/Users/brend/OneDrive/Documents/Data Bowl/Data/tracking_week_6.csv")
+tracking_week_7 <- read.csv("/Users/brend/OneDrive/Documents/Data Bowl/Data/tracking_week_7.csv")
+tracking_week_8 <- read.csv("/Users/brend/OneDrive/Documents/Data Bowl/Data/tracking_week_8.csv")
+tracking_week_9 <- read.csv("/Users/brend/OneDrive/Documents/Data Bowl/Data/tracking_week_9.csv")
+```
+
+
+Getting player information for each relevant position
+```{r}
+players_RB <- players %>% 
+  select(nflId, position, displayName) %>% 
+  filter(position == "RB")
+
+players_TE <- players %>% 
+  select(nflId, position, displayName) %>% 
+  filter(position == "TE")
+
+players_T <- players %>% 
+  select(nflId, position, displayName) %>% 
+  filter(position == "T")
+
+# Getting player_play information
+player_play_c <- player_play %>% 
+  select(gameId, playId, nflId, hadRushAttempt, inMotionAtBallSnap, shiftSinceLineset, wasRunningRoute, wasTargettedReceiver, routeRan, blockedPlayerNFLId1, blockedPlayerNFLId2, blockedPlayerNFLId3)
+
+# Merging to each player position
+RB_data <- merge(player_play_c, players_RB, by = "nflId")
+TE_data <- merge(player_play_c, players_TE, by = "nflId")
+T_data <- merge(player_play_c, players_T, by = "nflId")
+```
+
+Merging play and game data with TE data
+```{r}
+# Selecting appropriate columns
+plays_c <- plays %>% 
+  select(gameId, playId, quarter, down, yardsToGo, possessionTeam, yardlineSide, yardlineNumber, gameClock, preSnapHomeScore, preSnapVisitorScore, offenseFormation, receiverAlignment, passResult, qbSneak, qbKneel, qbSpike, playAction, pff_runPassOption, pff_passCoverage, pff_manZone)
+
+# Getting game information
+games_c <- games %>% 
+  select(gameId, homeTeamAbbr, visitorTeamAbbr)
+
+# plays and games merge
+games_plays <- merge(games_c, plays_c, by = c("gameId"))
+
+# Merging with TE data
+TE_data <- merge(games_plays, TE_data, by = c("gameId", "playId"))
+```
+
+Tracking data
+```{r}
+# Combining all tracking data
+tracking_all <- bind_rows(tracking_week_1, tracking_week_2, tracking_week_3, tracking_week_4, tracking_week_5, tracking_week_6, tracking_week_7, tracking_week_8, tracking_week_9)
+
+# Player position at line set
+tracking_players_ls <- subset(tracking_all, event == "line_set", select = c(gameId, playId, nflId, frameType, x, y, s))
+# Player position at ball snap
+tracking_players_bs <- subset(tracking_all, frameType == "SNAP", select = c(gameId, playId, nflId, frameType, x, y, s, playDirection))
+# Ball position
+tracking_ball <- subset(tracking_all, event == "line_set") %>% 
+  filter(is.na(nflId))
+
+
+# Removing nflId NAs (the football) observations from player tracking data
+tracking_players_bs <- subset(tracking_players_bs, !is.na(nflId))
+tracking_players_ls <- subset(tracking_players_ls, !is.na(nflId))
+
+
+# Changing the names of the variables for players
+
+# Before snap
+tracking_players_bs <- tracking_players_bs %>%
+  rename(
+    x_bs = x,
+    y_bs = y,
+    s_bs = s
+  )
+
+# For the football (so it can be differentiated from the players)
+tracking_ball <- tracking_ball %>%
+  rename(
+    x_fb = x,
+    y_fb = y,
+    s_fb = s
+  )
+
+# Line set
+tracking_players_ls <- tracking_players_ls %>% 
+  rename(
+    x_ls = x,
+    y_ls = y,
+    s_ls = s,
+  )
+
+# Merging Tracking Data
+# prep before merge
+tracking_players_bs <- tracking_players_bs %>% 
+  select(-frameType)
+
+tracking_players_ls <- tracking_players_ls %>% 
+  select(-frameType)
+
+tracking_ball <- tracking_ball %>% 
+  select(c(gameId, playId, x_fb, y_fb, s_fb))
+
+# Merge
+tracking_data <- merge(tracking_players_bs, tracking_players_ls, by = c("gameId", "playId", "nflId"))
+tracking_data <- merge(tracking_data, tracking_ball, by = c("gameId", "playId"))
+
+# Creating Distance from ball columns
+# Distance from ball at line set
+tracking_data <- tracking_data %>% 
+  mutate(DistFromBall_LS = round(sqrt((abs(x_ls - x_fb))**2 + (abs(y_ls - y_fb))**2), digits = 2))
+
+# Distance from ball at snap
+tracking_data <- tracking_data %>%
+  mutate(DistFromBall_BS = round(sqrt((abs(x_bs - x_fb))**2 + (abs(y_bs - y_fb))**2), digits = 2))
+
+# Distance from line of scrimmage
+tracking_data <- tracking_data %>% 
+  mutate(DistFromLOS = round(abs(x_bs - x_fb), digits = 2))
+
+# Distance from ball width (y-axis)
+tracking_data <- tracking_data %>% 
+  mutate(DistFromBall_Wid = round(abs(y_bs - y_fb), digits = 2))
+```
+
+Merging tracking data with positions
+```{r}
+TE_data <- merge(TE_data, tracking_data, by = c("gameId", "playId", "nflId"))
+T_data <- merge(T_data, tracking_data, by = c("gameId", "playId", "nflId"))
+RB_data <- merge(RB_data, tracking_data, by = c("gameId", "playId", "nflId"))
+```
+
+Saving resulting data
+*Replace 'file' with your file directory*
+```{r}
+save(TE_data, file = "/Users/brend/OneDrive/Documents/Data Bowl/Test Files/TE data.csv")
+save(TE_data, file = "/Users/brend/OneDrive/Documents/Data Bowl/Test Files/T data.csv")
+save(TE_data, file = "/Users/brend/OneDrive/Documents/Data Bowl/Test Files/RB data.csv")
+```
+
+
+

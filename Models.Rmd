@@ -1,0 +1,1517 @@
+---
+title: "Models"
+author: "Brendan McGuinness"
+output: html_document
+---
+
+# Models
+
+This Notebook will address
+
+-   Modeling the data to Random Forest
+-   The Results of the Model
+
+Load packages
+
+```{r, message=FALSE, warning=FALSE}
+library(dplyr)
+library(tidymodels)
+library(ranger)
+library(yardstick)
+library(vip)
+library(ggplot2)
+library(ggimage)
+```
+
+Load data
+
+**Replace 'file' with your file directory**
+
+```{r}
+TE_data_c <- read.csv("test/TE data c.csv")
+```
+
+If you have previously saved models run this code chunk, Then run every code chunk that has a **\$**
+
+```{r, eval=FALSE}
+load("test/32 model setup.rda")
+load("test/32 tune.rda")
+load("test/TE model setup.rda")
+load("test/TE tune.rda")
+load("test/TE fit.rda")
+load("test/32 fit.rda")
+load("test/TE v Team.rda")
+```
+
+**\$** Feature dropping and data cleaning for model running
+
+```{r}
+# Dropping variables that won't be used in the model or aren't worth analyzing
+TE_data_final <- TE_data_c %>% 
+  select(-c(playDesign, position, DistFromBall_LS, DistFromBall_BS, DistFromLOS, TacklePos, LOS_Tackle, DistFromBall_Tackle, max_s, yard_chg, y_chg, gameTime))
+
+# Changing all character variables into factors
+TE_data_final <- TE_data_final %>% 
+  mutate_if(is.character, as.factor)
+
+# Removing features that don't show a strong enough significance to be used in the model
+TE_data_final <- TE_data_final %>% 
+  select(-c(totalYardsToGo, redZone, NumberofTE, SideBS))
+
+# Changing downs and quarters into factors
+TE_data_final <- TE_data_final %>% 
+  mutate(
+    quarter = as.factor(quarter),
+    down = as.factor(down)
+  )
+
+# Changing all logistic variables into factors
+TE_data_final <- TE_data_final %>% 
+  mutate_if(is.logical, as.factor)
+```
+
+*More information on the reasoning behind dropping certain features run EDA.Rmd*
+
+## Modeling all 32 teams
+
+I am creating a model for each of the 32 teams because I want to see how significant the personnel is. Measuring the significance of which TE is on the field isn't possible with the overall data set. I have selected Random Forest because it showed the the highest ROC AUC scores when compared to other models such as: Logistic Regression, Elastic Net Regression, Support Vector Machine, and a Gradient Boosted tree, as well as being able to detect strong interactions I may have missed.
+
+*If you want to see tests between every model, run Model Testing.rmd in github*
+
+**\$** Splitting data between the 32 nfl teams
+
+```{r}
+TE_BUF <- TE_data_final %>% 
+  filter(possessionTeam == "BUF")
+TE_LA <- TE_data_final %>% 
+  filter(possessionTeam == "LA")
+TE_ATL <- TE_data_final %>% 
+  filter(possessionTeam == "ATL")
+TE_NO <- TE_data_final %>% 
+  filter(possessionTeam == "NO")
+TE_CLE <- TE_data_final %>% 
+  filter(possessionTeam == "CLE")
+TE_CAR <- TE_data_final %>% 
+  filter(possessionTeam == "CAR")
+TE_CHI <- TE_data_final %>% 
+  filter(possessionTeam == "CHI")
+TE_SF <- TE_data_final %>% 
+  filter(possessionTeam == "SF")
+TE_CIN <- TE_data_final %>% 
+  filter(possessionTeam == "CIN")
+TE_PIT <- TE_data_final %>% 
+  filter(possessionTeam == "PIT")
+TE_DET <- TE_data_final %>% 
+  filter(possessionTeam == "DET")
+TE_PHI <- TE_data_final %>% 
+  filter(possessionTeam == "PHI")
+TE_HOU <- TE_data_final %>% 
+  filter(possessionTeam == "HOU")
+TE_IND <- TE_data_final %>% 
+  filter(possessionTeam == "IND")
+TE_MIA <- TE_data_final %>% 
+  filter(possessionTeam == "MIA")
+TE_NE <- TE_data_final %>% 
+  filter(possessionTeam == "NE")
+TE_NYJ <- TE_data_final %>% 
+  filter(possessionTeam == "NYJ")
+TE_BAL <- TE_data_final %>% 
+  filter(possessionTeam == "BAL")
+TE_NYG <- TE_data_final %>% 
+  filter(possessionTeam == "NYG")
+TE_TEN <- TE_data_final %>% 
+  filter(possessionTeam == "TEN")
+TE_JAX <- TE_data_final %>% 
+  filter(possessionTeam == "JAX")
+TE_KC <- TE_data_final %>% 
+  filter(possessionTeam == "KC")
+TE_ARI <- TE_data_final %>% 
+  filter(possessionTeam == "ARI")
+TE_LAC <- TE_data_final %>% 
+  filter(possessionTeam == "LAC")
+TE_LV <- TE_data_final %>% 
+  filter(possessionTeam == "LV")
+TE_MIN <- TE_data_final %>% 
+  filter(possessionTeam == "MIN")
+TE_TB <- TE_data_final %>% 
+  filter(possessionTeam == "TB")
+TE_DAL <- TE_data_final %>% 
+  filter(possessionTeam == "DAL")
+TE_SEA <- TE_data_final %>% 
+  filter(possessionTeam == "SEA")
+TE_DEN <- TE_data_final %>% 
+  filter(possessionTeam == "DEN")
+TE_WAS <- TE_data_final %>% 
+  filter(possessionTeam == "WAS")
+TE_GB <- TE_data_final %>% 
+  filter(possessionTeam == "GB")
+```
+
+Splitting Data
+
+```{r}
+set.seed(1100)
+
+KC_split <- initial_split(TE_KC, prop = 0.80, strata = TEassignment)
+KC_train <- training(KC_split)
+KC_test <- testing(KC_split)
+KC_fold <- vfold_cv(KC_train, v = 5, strata = TEassignment)
+
+ARI_split <- initial_split(TE_ARI, prop = 0.80, strata = TEassignment)
+ARI_train <- training(ARI_split)
+ARI_test <- testing(ARI_split)
+ARI_fold <- vfold_cv(ARI_train, v = 5, strata = TEassignment)
+
+BUF_split <- initial_split(TE_BUF, prop = 0.80, strata = TEassignment)
+BUF_train <- training(BUF_split)
+BUF_test <- testing(BUF_split)
+BUF_fold <- vfold_cv(BUF_train, v = 5, strata = TEassignment)
+
+LA_split <- initial_split(TE_LA, prop = 0.80, strata = TEassignment)
+LA_train <- training(LA_split)
+LA_test <- testing(LA_split)
+LA_fold <- vfold_cv(LA_train, v = 5, strata = TEassignment)
+
+ATL_split <- initial_split(TE_ATL, prop = 0.80, strata = TEassignment)
+ATL_train <- training(ATL_split)
+ATL_test <- testing(ATL_split)
+ATL_fold <- vfold_cv(ATL_train, v = 5, strata = TEassignment)
+
+NO_split <- initial_split(TE_NO, prop = 0.80, strata = TEassignment)
+NO_train <- training(NO_split)
+NO_test <- testing(NO_split)
+NO_fold <- vfold_cv(NO_train, v = 5, strata = TEassignment)
+
+CLE_split <- initial_split(TE_CLE, prop = 0.80, strata = TEassignment)
+CLE_train <- training(CLE_split)
+CLE_test <- testing(CLE_split)
+CLE_fold <- vfold_cv(CLE_train, v = 5, strata = TEassignment)
+
+CAR_split <- initial_split(TE_CAR, prop = 0.80, strata = TEassignment)
+CAR_train <- training(CAR_split)
+CAR_test <- testing(CAR_split)
+CAR_fold <- vfold_cv(CAR_train, v = 5, strata = TEassignment)
+
+CHI_split <- initial_split(TE_CHI, prop = 0.80, strata = TEassignment)
+CHI_train <- training(CHI_split)
+CHI_test <- testing(CHI_split)
+CHI_fold <- vfold_cv(CHI_train, v = 5, strata = TEassignment)
+
+SF_split <- initial_split(TE_SF, prop = 0.80, strata = TEassignment)
+SF_train <- training(SF_split)
+SF_test <- testing(SF_split)
+SF_fold <- vfold_cv(SF_train, v = 5, strata = TEassignment)
+
+CIN_split <- initial_split(TE_CIN, prop = 0.80, strata = TEassignment)
+CIN_train <- training(CIN_split)
+CIN_test <- testing(CIN_split)
+CIN_fold <- vfold_cv(CIN_train, v = 5, strata = TEassignment)
+
+PIT_split <- initial_split(TE_PIT, prop = 0.80, strata = TEassignment)
+PIT_train <- training(PIT_split)
+PIT_test <- testing(PIT_split)
+PIT_fold <- vfold_cv(PIT_train, v = 5, strata = TEassignment)
+
+DET_split <- initial_split(TE_DET, prop = 0.80, strata = TEassignment)
+DET_train <- training(DET_split)
+DET_test <- testing(DET_split)
+DET_fold <- vfold_cv(DET_train, v = 5, strata = TEassignment)
+
+PHI_split <- initial_split(TE_PHI, prop = 0.80, strata = TEassignment)
+PHI_train <- training(PHI_split)
+PHI_test <- testing(PHI_split)
+PHI_fold <- vfold_cv(PHI_train, v = 5, strata = TEassignment)
+
+HOU_split <- initial_split(TE_HOU, prop = 0.80, strata = TEassignment)
+HOU_train <- training(HOU_split)
+HOU_test <- testing(HOU_split)
+HOU_fold <- vfold_cv(HOU_train, v = 5, strata = TEassignment)
+
+IND_split <- initial_split(TE_IND, prop = 0.80, strata = TEassignment)
+IND_train <- training(IND_split)
+IND_test <- testing(IND_split)
+IND_fold <- vfold_cv(IND_train, v = 5, strata = TEassignment)
+
+MIA_split <- initial_split(TE_MIA, prop = 0.80, strata = TEassignment)
+MIA_train <- training(MIA_split)
+MIA_test <- testing(MIA_split)
+MIA_fold <- vfold_cv(MIA_train, v = 5, strata = TEassignment)
+
+NE_split <- initial_split(TE_NE, prop = 0.80, strata = TEassignment)
+NE_train <- training(NE_split)
+NE_test <- testing(NE_split)
+NE_fold <- vfold_cv(NE_train, v = 5, strata = TEassignment)
+
+NYJ_split <- initial_split(TE_NYJ, prop = 0.80, strata = TEassignment)
+NYJ_train <- training(NYJ_split)
+NYJ_test <- testing(NYJ_split)
+NYJ_fold <- vfold_cv(NYJ_train, v = 5, strata = TEassignment)
+
+BAL_split <- initial_split(TE_BAL, prop = 0.80, strata = TEassignment)
+BAL_train <- training(BAL_split)
+BAL_test <- testing(BAL_split)
+BAL_fold <- vfold_cv(BAL_train, v = 5, strata = TEassignment)
+
+NYG_split <- initial_split(TE_NYG, prop = 0.80, strata = TEassignment)
+NYG_train <- training(NYG_split)
+NYG_test <- testing(NYG_split)
+NYG_fold <- vfold_cv(NYG_train, v = 5, strata = TEassignment)
+
+TEN_split <- initial_split(TE_TEN, prop = 0.80, strata = TEassignment)
+TEN_train <- training(TEN_split)
+TEN_test <- testing(TEN_split)
+TEN_fold <- vfold_cv(TEN_train, v = 5, strata = TEassignment)
+
+JAX_split <- initial_split(TE_JAX, prop = 0.80, strata = TEassignment)
+JAX_train <- training(JAX_split)
+JAX_test <- testing(JAX_split)
+JAX_fold <- vfold_cv(JAX_train, v = 5, strata = TEassignment)
+
+LAC_split <- initial_split(TE_LAC, prop = 0.80, strata = TEassignment)
+LAC_train <- training(LAC_split)
+LAC_test <- testing(LAC_split)
+LAC_fold <- vfold_cv(LAC_train, v = 5, strata = TEassignment)
+
+LV_split <- initial_split(TE_LV, prop = 0.80, strata = TEassignment)
+LV_train <- training(LV_split)
+LV_test <- testing(LV_split)
+LV_fold <- vfold_cv(LV_train, v = 5, strata = TEassignment)
+
+MIN_split <- initial_split(TE_MIN, prop = 0.80, strata = TEassignment)
+MIN_train <- training(MIN_split)
+MIN_test <- testing(MIN_split)
+MIN_fold <- vfold_cv(MIN_train, v = 5, strata = TEassignment)
+
+TB_split <- initial_split(TE_TB, prop = 0.80, strata = TEassignment)
+TB_train <- training(TB_split)
+TB_test <- testing(TB_split)
+TB_fold <- vfold_cv(TB_train, v = 5, strata = TEassignment)
+
+DAL_split <- initial_split(TE_DAL, prop = 0.80, strata = TEassignment)
+DAL_train <- training(DAL_split)
+DAL_test <- testing(DAL_split)
+DAL_fold <- vfold_cv(DAL_train, v = 5, strata = TEassignment)
+
+SEA_split <- initial_split(TE_SEA, prop = 0.80, strata = TEassignment)
+SEA_train <- training(SEA_split)
+SEA_test <- testing(SEA_split)
+SEA_fold <- vfold_cv(SEA_train, v = 5, strata = TEassignment)
+
+DEN_split <- initial_split(TE_DEN, prop = 0.80, strata = TEassignment)
+DEN_train <- training(DEN_split)
+DEN_test <- testing(DEN_split)
+DEN_fold <- vfold_cv(DEN_train, v = 5, strata = TEassignment)
+
+WAS_split <- initial_split(TE_WAS, prop = 0.80, strata = TEassignment)
+WAS_train <- training(WAS_split)
+WAS_test <- testing(WAS_split)
+WAS_fold <- vfold_cv(WAS_train, v = 5, strata = TEassignment)
+
+GB_split <- initial_split(TE_GB, prop = 0.80, strata = TEassignment)
+GB_train <- training(GB_split)
+GB_test <- testing(GB_split)
+GB_fold <- vfold_cv(GB_train, v = 5, strata = TEassignment)
+```
+
+Recipes for each model
+
+```{r}
+KC_recipe <- recipe(TEassignment ~ ., data = TE_KC) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+ARI_recipe <- recipe(TEassignment ~ ., data = TE_ARI) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+BUF_recipe <- recipe(TEassignment ~ ., data = TE_BUF) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+LA_recipe <- recipe(TEassignment ~ ., data = TE_LA) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+ATL_recipe <- recipe(TEassignment ~ ., data = TE_ATL) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+NO_recipe <- recipe(TEassignment ~ ., data = TE_NO) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+CLE_recipe <- recipe(TEassignment ~ ., data = TE_CLE) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+CAR_recipe <- recipe(TEassignment ~ ., data = TE_CAR) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+CHI_recipe <- recipe(TEassignment ~ ., data = TE_CHI) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+SF_recipe <- recipe(TEassignment ~ ., data = TE_SF) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+CIN_recipe <- recipe(TEassignment ~ ., data = TE_CIN) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+PIT_recipe <- recipe(TEassignment ~ ., data = TE_PIT) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+DET_recipe <- recipe(TEassignment ~ ., data = TE_DET) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+PHI_recipe <- recipe(TEassignment ~ ., data = TE_PHI) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+HOU_recipe <- recipe(TEassignment ~ ., data = TE_HOU) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+IND_recipe <- recipe(TEassignment ~ ., data = TE_IND) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+MIA_recipe <- recipe(TEassignment ~ ., data = TE_MIA) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+NE_recipe <- recipe(TEassignment ~ ., data = TE_NE) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+NYJ_recipe <- recipe(TEassignment ~ ., data = TE_NYJ) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+BAL_recipe <- recipe(TEassignment ~ ., data = TE_BAL) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+NYG_recipe <- recipe(TEassignment ~ ., data = TE_NYG) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+TEN_recipe <- recipe(TEassignment ~ ., data = TE_TEN) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+JAX_recipe <- recipe(TEassignment ~ ., data = TE_JAX) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+LAC_recipe <- recipe(TEassignment ~ ., data = TE_LAC) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+LV_recipe <- recipe(TEassignment ~ ., data = TE_LV) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+MIN_recipe <- recipe(TEassignment ~ ., data = TE_MIN) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+TB_recipe <- recipe(TEassignment ~ ., data = TE_TB) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+DAL_recipe <- recipe(TEassignment ~ ., data = TE_DAL) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+SEA_recipe <- recipe(TEassignment ~ ., data = TE_SEA) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+DEN_recipe <- recipe(TEassignment ~ ., data = TE_DEN) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+WAS_recipe <- recipe(TEassignment ~ ., data = TE_WAS) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+GB_recipe <- recipe(TEassignment ~ ., data = TE_GB) %>% 
+  step_rm(gameId, playId, nflId, possessionTeam)
+```
+
+If you choose to save the model setup
+
+**Replace 'file' with your file directory**
+
+```{r, eval=FALSE}
+# Saving processes
+save(KC_train, KC_test, KC_fold, KC_recipe,
+     ARI_train, ARI_test, ARI_fold, ARI_recipe,
+     BUF_train, BUF_test, BUF_fold, BUF_recipe,
+     LA_train, LA_test, LA_fold, LA_recipe,
+     ATL_train, ATL_test, ATL_fold, ATL_recipe,
+     NO_train, NO_test, NO_fold, NO_recipe,
+     CLE_train, CLE_test, CLE_fold, CLE_recipe,
+     CAR_train, CAR_test, CAR_fold, CAR_recipe,
+     CHI_train, CHI_test, CHI_fold, CHI_recipe,
+     SF_train, SF_test, SF_fold, SF_recipe,
+     CIN_train, CIN_test, CIN_fold, CIN_recipe,
+     PIT_train, PIT_test, PIT_fold, PIT_recipe,
+     DET_train, DET_test, DET_fold, DET_recipe,
+     PHI_train, PHI_test, PHI_fold, PHI_recipe,
+     HOU_train, HOU_test, HOU_fold, HOU_recipe,
+     IND_train, IND_test, IND_fold, IND_recipe,
+     MIA_train, MIA_test, MIA_fold, MIA_recipe,
+     NE_train, NE_test, NE_fold, NE_recipe,
+     NYJ_train, NYJ_test, NYJ_fold, NYJ_recipe,
+     BAL_train, BAL_test, BAL_fold, BAL_recipe,
+     NYG_train, NYG_test, NYG_fold, NYG_recipe, 
+     TEN_train, TEN_test, TEN_fold, TEN_recipe, 
+     JAX_train, JAX_test, JAX_fold, JAX_recipe, 
+     LAC_train, LAC_test, LAC_fold, LAC_recipe, 
+     LV_train, LV_test, LV_fold, LV_recipe, 
+     MIN_train, MIN_test, MIN_fold, MIN_recipe, 
+     TB_train, TB_test, TB_fold, TB_recipe, 
+     DAL_train, DAL_test, DAL_fold, DAL_recipe, 
+     SEA_train, SEA_test, SEA_fold, SEA_recipe, 
+     DEN_train, DEN_test, DEN_fold, DEN_recipe, 
+     WAS_train, WAS_test, WAS_fold, WAS_recipe, 
+     GB_train, GB_test, GB_fold, GB_recipe, file = "file/32 model setup.rda")
+```
+
+**\$** Creating Workflows
+
+```{r}
+rf_set_32 <- rand_forest(
+  mtry = tune(),
+  trees = tune(),
+  min_n = tune()) %>% 
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("classification")
+
+rf_wflow_KC <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(KC_recipe)
+
+rf_wflow_ARI <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(ARI_recipe)
+
+rf_wflow_BUF <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(BUF_recipe)
+
+rf_wflow_LA <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(LA_recipe)
+
+rf_wflow_ATL <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(ATL_recipe)
+
+rf_wflow_NO <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(NO_recipe)
+
+rf_wflow_CLE <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(CLE_recipe)
+
+rf_wflow_CAR <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(CAR_recipe)
+
+rf_wflow_CHI <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(CHI_recipe)
+
+rf_wflow_SF <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(SF_recipe)
+
+rf_wflow_CIN <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(CIN_recipe)
+
+rf_wflow_PIT <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(PIT_recipe)
+
+rf_wflow_DET <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(DET_recipe)
+
+rf_wflow_PHI <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(PHI_recipe)
+
+rf_wflow_HOU <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(HOU_recipe)
+
+rf_wflow_IND <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(IND_recipe)
+
+rf_wflow_MIA <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(MIA_recipe)
+
+rf_wflow_NE <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(NE_recipe)
+
+rf_wflow_NYJ <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(NYJ_recipe)
+
+rf_wflow_BAL <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(BAL_recipe)
+
+rf_wflow_NYG <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(NYG_recipe)
+
+rf_wflow_TEN <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(TEN_recipe)
+
+rf_wflow_JAX <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(JAX_recipe)
+
+rf_wflow_LAC <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(LAC_recipe)
+
+rf_wflow_LV <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(LV_recipe)
+
+rf_wflow_MIN <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(MIN_recipe)
+
+rf_wflow_TB <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(TB_recipe)
+
+rf_wflow_DAL <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(DAL_recipe)
+
+rf_wflow_SEA <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(SEA_recipe)
+
+rf_wflow_DEN <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(DEN_recipe)
+
+rf_wflow_WAS <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(WAS_recipe)
+
+rf_wflow_GB <- workflow() %>% 
+  add_model(rf_set_32) %>% 
+  add_recipe(GB_recipe)
+```
+
+**\$** Grid set up
+
+```{r}
+rf_grid_32 <- grid_regular(mtry(range = c(2,10)),
+                             trees(range = c(100, 500)),
+                             min_n(range = c(2, 10)),
+                             levels = 5)
+```
+
+Tuning
+
+```{r}
+set.seed(1100)
+
+rf_tune_KC <- tune_grid(
+  rf_wflow_KC,
+  resamples = KC_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_ARI <- tune_grid(
+  rf_wflow_ARI,
+  resamples = ARI_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_BUF <- tune_grid(
+  rf_wflow_BUF,
+  resamples = BUF_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_LA <- tune_grid(
+  rf_wflow_LA,
+  resamples = LA_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_ATL <- tune_grid(
+  rf_wflow_ATL,
+  resamples = ATL_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_NO <- tune_grid(
+  rf_wflow_NO,
+  resamples = NO_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_CLE <- tune_grid(
+  rf_wflow_CLE,
+  resamples = CLE_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_CAR <- tune_grid(
+  rf_wflow_CAR,
+  resamples = CAR_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_CHI <- tune_grid(
+  rf_wflow_CHI,
+  resamples = CHI_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_SF <- tune_grid(
+  rf_wflow_SF,
+  resamples = SF_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_CIN <- tune_grid(
+  rf_wflow_CIN,
+  resamples = CIN_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_PIT <- tune_grid(
+  rf_wflow_PIT,
+  resamples = PIT_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_DET <- tune_grid(
+  rf_wflow_DET,
+  resamples = DET_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_PHI <- tune_grid(
+  rf_wflow_PHI,
+  resamples = PHI_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_HOU <- tune_grid(
+  rf_wflow_HOU,
+  resamples = HOU_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_IND <- tune_grid(
+  rf_wflow_IND,
+  resamples = IND_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_MIA <- tune_grid(
+  rf_wflow_MIA,
+  resamples = MIA_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_NE <- tune_grid(
+  rf_wflow_NE,
+  resamples = NE_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_NYJ <- tune_grid(
+  rf_wflow_NYJ,
+  resamples = NYJ_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_BAL <- tune_grid(
+  rf_wflow_BAL,
+  resamples = BAL_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_NYG <- tune_grid(
+  rf_wflow_NYG,
+  resamples = NYG_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_TEN <- tune_grid(
+  rf_wflow_TEN,
+  resamples = TEN_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_JAX <- tune_grid(
+  rf_wflow_JAX,
+  resamples = JAX_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_LAC <- tune_grid(
+  rf_wflow_LAC,
+  resamples = LAC_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_LV <- tune_grid(
+  rf_wflow_LV,
+  resamples = LV_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_MIN <- tune_grid(
+  rf_wflow_MIN,
+  resamples = MIN_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_TB <- tune_grid(
+  rf_wflow_TB,
+  resamples = TB_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_DAL <- tune_grid(
+  rf_wflow_DAL,
+  resamples = DAL_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_SEA <- tune_grid(
+  rf_wflow_SEA,
+  resamples = SEA_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_DEN <- tune_grid(
+  rf_wflow_DEN,
+  resamples = DEN_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_WAS <- tune_grid(
+  rf_wflow_WAS,
+  resamples = WAS_fold,
+  grid = rf_grid_32
+)
+
+rf_tune_GB <- tune_grid(
+  rf_wflow_GB,
+  resamples = GB_fold,
+  grid = rf_grid_32
+)
+```
+
+If you choose to save the model tuning
+
+**Replace 'file' with your file directory**
+
+```{r, eval=FALSE}
+save(rf_tune_KC, rf_tune_ARI, rf_tune_BUF, rf_tune_LA, 
+     rf_tune_ATL, rf_tune_NO, rf_tune_CLE, rf_tune_CAR, 
+     rf_tune_CHI, rf_tune_SF, rf_tune_CIN, rf_tune_PIT, 
+     rf_tune_DET, rf_tune_PHI, rf_tune_HOU, rf_tune_IND, 
+     rf_tune_MIA, rf_tune_NE, rf_tune_NYJ, rf_tune_BAL, 
+     rf_tune_NYG, rf_tune_TEN, rf_tune_JAX, rf_tune_LAC, 
+     rf_tune_LV, rf_tune_MIN, rf_tune_TB, rf_tune_DAL, 
+     rf_tune_SEA, rf_tune_DEN, rf_tune_WAS, rf_tune_GB, 
+     file = "/Users/brend/OneDrive/Documents/Data Bowl Notebooks/Test Files/32 tune.rda")
+```
+
+**\$** Selecting the best forest parameters that lead to the highest ROC AUC values
+
+```{r}
+best_KC <- show_best(rf_tune_KC, metric = "roc_auc", n = 1)
+best_ARI <- show_best(rf_tune_ARI, metric = "roc_auc", n = 1)
+best_BUF <- show_best(rf_tune_BUF, metric = "roc_auc", n = 1)
+best_LA <- show_best(rf_tune_LA, metric = "roc_auc", n = 1)
+best_ATL <- show_best(rf_tune_ATL, metric = "roc_auc", n = 1)
+best_NO <- show_best(rf_tune_NO, metric = "roc_auc", n = 1)
+best_CLE <- show_best(rf_tune_CLE, metric = "roc_auc", n = 1)
+best_CAR <- show_best(rf_tune_CAR, metric = "roc_auc", n = 1)
+best_CHI <- show_best(rf_tune_CHI, metric = "roc_auc", n = 1)
+best_SF <- show_best(rf_tune_SF, metric = "roc_auc", n = 1)
+best_CIN <- show_best(rf_tune_CIN, metric = "roc_auc", n = 1)
+best_PIT <- show_best(rf_tune_PIT, metric = "roc_auc", n = 1)
+best_DET <- show_best(rf_tune_DET, metric = "roc_auc", n = 1)
+best_PHI <- show_best(rf_tune_PHI, metric = "roc_auc", n = 1)
+best_HOU <- show_best(rf_tune_HOU, metric = "roc_auc", n = 1)
+best_IND <- show_best(rf_tune_IND, metric = "roc_auc", n = 1)
+best_MIA <- show_best(rf_tune_MIA, metric = "roc_auc", n = 1)
+best_NE <- show_best(rf_tune_NE, metric = "roc_auc", n = 1)
+best_NYJ <- show_best(rf_tune_NYJ, metric = "roc_auc", n = 1)
+best_BAL <- show_best(rf_tune_BAL, metric = "roc_auc", n = 1)
+best_NYG <- show_best(rf_tune_NYG, metric = "roc_auc", n = 1)
+best_TEN <- show_best(rf_tune_TEN, metric = "roc_auc", n = 1)
+best_JAX <- show_best(rf_tune_JAX, metric = "roc_auc", n = 1)
+best_LAC <- show_best(rf_tune_LAC, metric = "roc_auc", n = 1)
+best_LV <- show_best(rf_tune_LV, metric = "roc_auc", n = 1)
+best_MIN <- show_best(rf_tune_MIN, metric = "roc_auc", n = 1)
+best_TB <- show_best(rf_tune_TB, metric = "roc_auc", n = 1)
+best_DAL <- show_best(rf_tune_DAL, metric = "roc_auc", n = 1)
+best_SEA <- show_best(rf_tune_SEA, metric = "roc_auc", n = 1)
+best_DEN <- show_best(rf_tune_DEN, metric = "roc_auc", n = 1)
+best_WAS <- show_best(rf_tune_WAS, metric = "roc_auc", n = 1)
+best_GB <- show_best(rf_tune_GB, metric = "roc_auc", n = 1)
+```
+
+**\$** ROC AUC values for every nfl team
+
+```{r}
+model_vector <- c("KC", "ARI", "BUF", "LA", "ATL", "NO", "CLE", "CAR", "CHI", "SF", "CIN", "PIT", "DET", "PHI", "HOU", "IND", "MIA", "NE",  "NYJ", "BAL", "NYG", "TEN", "JAX", "LAC", "LV", "MIN", "TB",  "DAL", "SEA", "DEN", "WAS", "GB")
+roc_results_32 <- bind_rows(best_KC, best_ARI, best_BUF, best_LA, best_ATL, best_NO, best_CLE, best_CAR, best_CHI, best_SF, best_CIN, best_PIT, best_DET, best_PHI, best_HOU, best_IND, best_MIA, best_NE, best_NYJ, best_BAL, best_NYG, best_TEN, best_JAX, best_LAC, best_LV, best_MIN, best_TB, best_DAL, best_SEA, best_DEN, best_WAS, best_GB)
+
+roc_results_32$Team <- model_vector
+roc_results_32 <- roc_results_32[, c('Team', '.metric', 'mean')]
+roc_results_32[order(-roc_results_32$mean), ]
+```
+
+## Model Creation TE Overall
+
+Splitting the Data
+
+The Reasons for splitting data by previous 32 team testing data is because it allows us to compare overall model to 32 team models more accurately.
+
+Every test observation the TE overall model will predicts will be the same for the 32 team models, and we'll be able to see the difference between the model performances.
+
+```{r}
+# 20.18% of data is in TE_test
+TE_test <- bind_rows(KC_test, ARI_test, BUF_test, LA_test,
+                   ATL_test, NO_test, CLE_test, CAR_test,
+                   CHI_test, SF_test, CIN_test, PIT_test,
+                   DET_test, PHI_test, HOU_test, IND_test,
+                   MIA_test, NE_test, NYJ_test, BAL_test,
+                   NYG_test, TEN_test, JAX_test, LAC_test,
+                   LV_test, MIN_test, TB_test, DAL_test,
+                   SEA_test, DEN_test, WAS_test, GB_test)
+
+# 79.82% of data is in TE_train
+TE_train <- anti_join(TE_data_final, TE_test, by = c("gameId", "playId", "nflId"))
+
+# Stratified Sampling
+set.seed(1100)
+TE_fold <- vfold_cv(TE_train, v = 5, strata = TEassignment)
+```
+
+Recipe for interaction required models
+
+```{r}
+TE_recipe <- recipe(TEassignment ~ ., data = TE_data_final) %>%
+  step_rm(gameId, playId, nflId, possessionTeam, displayName)
+
+
+
+prep(TE_recipe) %>%
+  bake(new_data = TE_train) %>%
+  head()
+```
+
+If you choose to save model set up
+
+**Replace 'file' with your file directory**
+
+```{r, eval=FALSE}
+# Saving processes
+save(TE_train, TE_test, TE_fold, TE_recipe, 
+     file = "file/TE model setup.rda")
+```
+
+**\$** Model setups
+
+```{r}
+# Random Forest
+rf_set_TE <- rand_forest(
+  mtry = tune(),
+  trees = tune(),
+  min_n = tune()) %>% 
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("classification")
+```
+
+**\$** Workflow
+
+```{r}
+rf_wflow_TE <- workflow() %>% 
+  add_model(rf_set_TE) %>% 
+  add_recipe(TE_recipe)
+```
+
+**\$** Grid
+
+```{r}
+rf_grid_TE <- grid_regular(mtry(range = c(2,10)),
+                             trees(range = c(200,1000)),
+                             min_n(range = c(2,10)),
+                             levels = 5)
+```
+
+Tuning
+
+```{r}
+set.seed(1100)
+
+rf_tune_TE <- tune_grid(
+  rf_wflow_TE,
+  resamples = TE_fold,
+  grid = rf_grid_TE
+)
+```
+
+If you choose to save the model tuning
+
+**Replace 'file' with your file directory**
+
+```{r, eval=FALSE}
+save(rf_tune_TE, file = "file/TE tune.rda")
+```
+
+**\$** ROC AUC plots for frameworks
+
+```{r}
+# Plots
+autoplot(rf_tune_TE, metric = "roc_auc")
+```
+
+**\$** Best ROC AUC after tuning
+
+```{r}
+best_rf_TE <- show_best(rf_tune_TE, metric = "roc_auc", n = 1)
+```
+
+Fitting the model
+
+```{r}
+set.seed(1100)
+final_rf_TE <- finalize_workflow(rf_wflow_TE, best_rf_TE)
+final_rf_TE <- fit(final_rf_TE, TE_train)
+
+# Test
+final_rf_test <- augment(final_rf_TE, TE_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+```
+
+If you choose to save fitted model
+
+**Replace 'file' with your file directory**
+
+```{r, eval=FALSE}
+save(final_rf_TE, final_rf_test, file = "/Users/brend/OneDrive/Documents/Data Bowl Notebooks/Test Files/TE fit.rda")
+```
+
+**\$** Results
+
+```{r}
+# Viewing most important parameters
+final_rf_TE %>% extract_fit_parsnip() %>% 
+  vip(num_features = 20)
+
+# Overal accuracy
+roc_auc(final_rf_test, truth = TEassignment, '.pred_Block')
+```
+
+**\$** ROC curve
+
+```{r}
+roc_curve(final_rf_test, truth = TEassignment, '.pred_Block') %>% 
+  autoplot()
+```
+
+**\$** Confusion Matrix
+
+```{r}
+conf_mat(final_rf_test, truth = TEassignment, .pred_class) %>% 
+  autoplot(type = "heatmap")
+```
+
+Fitting every team model
+
+```{r}
+set.seed(1100)
+
+final_rf_KC <- finalize_workflow(rf_wflow_KC, best_KC)
+final_rf_KC <- fit(final_rf_KC, KC_train)
+final_test_KC <- augment(final_rf_KC, KC_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_ARI <- finalize_workflow(rf_wflow_ARI, best_ARI)
+final_rf_ARI <- fit(final_rf_ARI, ARI_train)
+final_test_ARI <- augment(final_rf_ARI, ARI_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_BUF <- finalize_workflow(rf_wflow_BUF, best_BUF)
+final_rf_BUF <- fit(final_rf_BUF, BUF_train)
+final_test_BUF <- augment(final_rf_BUF, BUF_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_LA <- finalize_workflow(rf_wflow_LA, best_LA)
+final_rf_LA <- fit(final_rf_LA, LA_train)
+final_test_LA <- augment(final_rf_LA, LA_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_ATL <- finalize_workflow(rf_wflow_ATL, best_ATL)
+final_rf_ATL <- fit(final_rf_ATL, ATL_train)
+final_test_ATL <- augment(final_rf_ATL, ATL_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_NO <- finalize_workflow(rf_wflow_NO, best_NO)
+final_rf_NO <- fit(final_rf_NO, NO_train)
+final_test_NO <- augment(final_rf_NO, NO_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_CLE <- finalize_workflow(rf_wflow_CLE, best_CLE)
+final_rf_CLE <- fit(final_rf_CLE, CLE_train)
+final_test_CLE <- augment(final_rf_CLE, CLE_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_CAR <- finalize_workflow(rf_wflow_CAR, best_CAR)
+final_rf_CAR <- fit(final_rf_CAR, CAR_train)
+final_test_CAR <- augment(final_rf_CAR, CAR_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_CHI <- finalize_workflow(rf_wflow_CHI, best_CHI)
+final_rf_CHI <- fit(final_rf_CHI, CHI_train)
+final_test_CHI <- augment(final_rf_CHI, CHI_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_SF <- finalize_workflow(rf_wflow_SF, best_SF)
+final_rf_SF <- fit(final_rf_SF, SF_train)
+final_test_SF <- augment(final_rf_SF, SF_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_CIN <- finalize_workflow(rf_wflow_CIN, best_CIN)
+final_rf_CIN <- fit(final_rf_CIN, CIN_train)
+final_test_CIN <- augment(final_rf_CIN, CIN_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_PIT <- finalize_workflow(rf_wflow_PIT, best_PIT)
+final_rf_PIT <- fit(final_rf_PIT, PIT_train)
+final_test_PIT <- augment(final_rf_PIT, PIT_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_DET <- finalize_workflow(rf_wflow_DET, best_DET)
+final_rf_DET <- fit(final_rf_DET, DET_train)
+final_test_DET <- augment(final_rf_DET, DET_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_PHI <- finalize_workflow(rf_wflow_PHI, best_PHI)
+final_rf_PHI <- fit(final_rf_PHI, PHI_train)
+final_test_PHI <- augment(final_rf_PHI, PHI_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_HOU <- finalize_workflow(rf_wflow_HOU, best_HOU)
+final_rf_HOU <- fit(final_rf_HOU, HOU_train)
+final_test_HOU <- augment(final_rf_HOU, HOU_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_IND <- finalize_workflow(rf_wflow_IND, best_IND)
+final_rf_IND <- fit(final_rf_IND, IND_train)
+final_test_IND <- augment(final_rf_IND, IND_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_MIA <- finalize_workflow(rf_wflow_MIA, best_MIA)
+final_rf_MIA <- fit(final_rf_MIA, MIA_train)
+final_test_MIA <- augment(final_rf_MIA, MIA_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_NE <- finalize_workflow(rf_wflow_NE, best_NE)
+final_rf_NE <- fit(final_rf_NE, NE_train)
+final_test_NE <- augment(final_rf_NE, NE_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_NYJ <- finalize_workflow(rf_wflow_NYJ, best_NYJ)
+final_rf_NYJ <- fit(final_rf_NYJ, NYJ_train)
+final_test_NYJ <- augment(final_rf_NYJ, NYJ_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_BAL <- finalize_workflow(rf_wflow_BAL, best_BAL)
+final_rf_BAL <- fit(final_rf_BAL, BAL_train)
+final_test_BAL <- augment(final_rf_BAL, BAL_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_NYG <- finalize_workflow(rf_wflow_NYG, best_NYG)
+final_rf_NYG <- fit(final_rf_NYG, NYG_train)
+final_test_NYG <- augment(final_rf_NYG, NYG_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_TEN <- finalize_workflow(rf_wflow_TEN, best_TEN)
+final_rf_TEN <- fit(final_rf_TEN, TEN_train)
+final_test_TEN <- augment(final_rf_TEN, TEN_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_JAX <- finalize_workflow(rf_wflow_JAX, best_JAX)
+final_rf_JAX <- fit(final_rf_JAX, JAX_train)
+final_test_JAX <- augment(final_rf_JAX, JAX_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_LAC <- finalize_workflow(rf_wflow_LAC, best_LAC)
+final_rf_LAC <- fit(final_rf_LAC, LAC_train)
+final_test_LAC <- augment(final_rf_LAC, LAC_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_LV <- finalize_workflow(rf_wflow_LV, best_LV)
+final_rf_LV <- fit(final_rf_LV, LV_train)
+final_test_LV <- augment(final_rf_LV, LV_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_MIN <- finalize_workflow(rf_wflow_MIN, best_MIN)
+final_rf_MIN <- fit(final_rf_MIN, MIN_train)
+final_test_MIN <- augment(final_rf_MIN, MIN_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_TB <- finalize_workflow(rf_wflow_TB, best_TB)
+final_rf_TB <- fit(final_rf_TB, TB_train)
+final_test_TB <- augment(final_rf_TB, TB_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_DAL <- finalize_workflow(rf_wflow_DAL, best_DAL)
+final_rf_DAL <- fit(final_rf_DAL, DAL_train)
+final_test_DAL <- augment(final_rf_DAL, DAL_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_SEA <- finalize_workflow(rf_wflow_SEA, best_SEA)
+final_rf_SEA <- fit(final_rf_SEA, SEA_train)
+final_test_SEA <- augment(final_rf_SEA, SEA_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_DEN <- finalize_workflow(rf_wflow_DEN, best_DEN)
+final_rf_DEN <- fit(final_rf_DEN, DEN_train)
+final_test_DEN <- augment(final_rf_DEN, DEN_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_WAS <- finalize_workflow(rf_wflow_WAS, best_WAS)
+final_rf_WAS <- fit(final_rf_WAS, WAS_train)
+final_test_WAS <- augment(final_rf_WAS, WAS_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+final_rf_GB <- finalize_workflow(rf_wflow_GB, best_GB)
+final_rf_GB <- fit(final_rf_GB, GB_train)
+final_test_GB <- augment(final_rf_GB, GB_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+```
+
+```{r, eval=FALSE}
+save(final_rf_KC, final_test_KC, final_rf_ARI, final_test_ARI, final_rf_BUF, final_test_BUF, final_rf_LA, final_test_LA, 
+     final_rf_ATL, final_test_ATL, final_rf_NO, final_test_NO, final_rf_CLE, final_test_CLE, final_rf_CAR, final_test_CAR, 
+     final_rf_CHI, final_test_CHI, final_rf_SF, final_test_SF, final_rf_CIN, final_test_CIN, final_rf_PIT, final_test_PIT,
+     final_rf_DET, final_test_DET, final_rf_PHI, final_test_PHI, final_rf_HOU, final_test_HOU, final_rf_IND, final_test_IND,
+     final_rf_MIA, final_test_MIA, final_rf_NE, final_test_NE, final_rf_NYJ, final_test_NYJ, final_rf_BAL, final_test_BAL, 
+     final_rf_NYG, final_test_NYG, final_rf_TEN, final_test_TEN, final_rf_JAX, final_test_JAX, final_rf_LAC, final_test_LAC, 
+     final_rf_LV, final_test_LV, final_rf_MIN, final_test_MIN, final_rf_TB, final_test_TB, final_rf_DAL, final_test_DAL, 
+     final_rf_SEA, final_test_SEA, final_rf_DEN, final_test_DEN, final_rf_WAS, final_test_WAS, final_rf_GB, final_test_GB, 
+     file = "file/32 fit.rda")
+```
+
+```{r}
+# accuracy for each team model
+KC_est <- roc_auc(final_test_KC, truth = TEassignment, '.pred_Block')
+ARI_est <- roc_auc(final_test_ARI, truth = TEassignment, '.pred_Block')
+BUF_est <- roc_auc(final_test_BUF, truth = TEassignment, '.pred_Block')
+LA_est <- roc_auc(final_test_LA, truth = TEassignment, '.pred_Block')
+ATL_est <- roc_auc(final_test_ATL, truth = TEassignment, '.pred_Block')
+NO_est <- roc_auc(final_test_NO, truth = TEassignment, '.pred_Block')
+CLE_est <- roc_auc(final_test_CLE, truth = TEassignment, '.pred_Block')
+CAR_est <- roc_auc(final_test_CAR, truth = TEassignment, '.pred_Block')
+CHI_est <- roc_auc(final_test_CHI, truth = TEassignment, '.pred_Block')
+SF_est <- roc_auc(final_test_SF, truth = TEassignment, '.pred_Block')
+CIN_est <- roc_auc(final_test_CIN, truth = TEassignment, '.pred_Block')
+PIT_est <- roc_auc(final_test_PIT, truth = TEassignment, '.pred_Block')
+DET_est <- roc_auc(final_test_DET, truth = TEassignment, '.pred_Block')
+PHI_est <- roc_auc(final_test_PHI, truth = TEassignment, '.pred_Block')
+HOU_est <- roc_auc(final_test_HOU, truth = TEassignment, '.pred_Block')
+IND_est <- roc_auc(final_test_IND, truth = TEassignment, '.pred_Block')
+MIA_est <- roc_auc(final_test_MIA, truth = TEassignment, '.pred_Block')
+NE_est <- roc_auc(final_test_NE, truth = TEassignment, '.pred_Block')
+NYJ_est <- roc_auc(final_test_NYJ, truth = TEassignment, '.pred_Block')
+BAL_est <- roc_auc(final_test_BAL, truth = TEassignment, '.pred_Block')
+NYG_est <- roc_auc(final_test_NYG, truth = TEassignment, '.pred_Block')
+TEN_est <- roc_auc(final_test_TEN, truth = TEassignment, '.pred_Block')
+JAX_est <- roc_auc(final_test_JAX, truth = TEassignment, '.pred_Block')
+LAC_est <- roc_auc(final_test_LAC, truth = TEassignment, '.pred_Block')
+LV_est <- roc_auc(final_test_LV, truth = TEassignment, '.pred_Block')
+MIN_est <- roc_auc(final_test_MIN, truth = TEassignment, '.pred_Block')
+TB_est <- roc_auc(final_test_TB, truth = TEassignment, '.pred_Block')
+DAL_est <- roc_auc(final_test_DAL, truth = TEassignment, '.pred_Block')
+SEA_est <- roc_auc(final_test_SEA, truth = TEassignment, '.pred_Block')
+DEN_est <- roc_auc(final_test_DEN, truth = TEassignment, '.pred_Block')
+WAS_est <- roc_auc(final_test_WAS, truth = TEassignment, '.pred_Block')
+GB_est <- roc_auc(final_test_GB, truth = TEassignment, '.pred_Block')
+
+team_vector <- c("KC", "ARI", "BUF", "LA", "ATL", "NO", "CLE", "CAR", "CHI", "SF", "CIN", "PIT", "DET", "PHI", "HOU", "IND", "MIA", "NE",  "NYJ", "BAL", "NYG", "TEN", "JAX", "LAC", "LV", "MIN", "TB",  "DAL", "SEA", "DEN", "WAS", "GB")
+roc_final_32 <- bind_rows(KC_est, ARI_est, BUF_est, LA_est, ATL_est, NO_est, CLE_est, CAR_est, CHI_est, SF_est, CIN_est, PIT_est, DET_est, PHI_est, HOU_est, IND_est, MIA_est, NE_est, NYJ_est, BAL_est, NYG_est, TEN_est, JAX_est, LAC_est, LV_est, MIN_est, TB_est, DAL_est, SEA_est, DEN_est, WAS_est, GB_est)
+
+roc_final_32$Team <- team_vector
+roc_final_32 <- roc_final_32[, c('Team', '.metric', '.estimate')]
+roc_final_32 <- roc_final_32 %>% 
+  rename(Team_Model_Accuracy = .estimate) %>% 
+  select(-.metric)
+```
+
+Testing every NFL team using the overall model
+
+```{r}
+set.seed(1100)
+# TE test compared to every team test
+TEvKC <- augment(final_rf_TE, KC_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvARI <- augment(final_rf_TE, ARI_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvBUF <- augment(final_rf_TE, BUF_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvLA <- augment(final_rf_TE, LA_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvATL <- augment(final_rf_TE, ATL_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvNO <- augment(final_rf_TE, NO_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvCLE <- augment(final_rf_TE, CLE_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvCAR <- augment(final_rf_TE, CAR_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvCHI <- augment(final_rf_TE, CHI_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvSF <- augment(final_rf_TE, SF_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvCIN <- augment(final_rf_TE, CIN_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvPIT <- augment(final_rf_TE, PIT_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvDET <- augment(final_rf_TE, DET_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvPHI <- augment(final_rf_TE, PHI_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvHOU <- augment(final_rf_TE, HOU_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvIND <- augment(final_rf_TE, IND_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvMIA <- augment(final_rf_TE, MIA_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvNE <- augment(final_rf_TE, NE_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvNYJ <- augment(final_rf_TE, NYJ_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvBAL <- augment(final_rf_TE, BAL_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvNYG <- augment(final_rf_TE, NYG_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvTEN <- augment(final_rf_TE, TEN_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvJAX <- augment(final_rf_TE, JAX_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvLAC <- augment(final_rf_TE, LAC_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvLV <- augment(final_rf_TE, LV_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvMIN <- augment(final_rf_TE, MIN_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvTB <- augment(final_rf_TE, TB_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvDAL <- augment(final_rf_TE, DAL_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvSEA <- augment(final_rf_TE, SEA_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvDEN <- augment(final_rf_TE, DEN_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvWAS <- augment(final_rf_TE, WAS_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+TEvGB <- augment(final_rf_TE, GB_test) %>% 
+  select(TEassignment, starts_with(".pred"))
+```
+
+```{r, eval=FALSE}
+save(TEvKC, TEvARI, TEvBUF, TEvLA, TEvATL, TEvNO, TEvCLE, TEvCAR, 
+     TEvCHI, TEvSF, TEvCIN, TEvPIT, TEvDET, TEvPHI, TEvHOU, TEvIND, 
+     TEvMIA, TEvNE, TEvNYJ, TEvBAL, TEvNYG, TEvTEN, TEvJAX, TEvLAC, 
+     TEvLV, TEvMIN, TEvTB, TEvDAL, TEvSEA, TEvDEN, TEvWAS, TEvGB, 
+     file = "file/TE v Team.rda")
+```
+
+```{r}
+# Getting the accuracy for each team
+TEvKC <- roc_auc(TEvKC, truth = TEassignment, '.pred_Block')
+TEvARI <- roc_auc(TEvARI, truth = TEassignment, '.pred_Block')
+TEvBUF <- roc_auc(TEvBUF, truth = TEassignment, '.pred_Block')
+TEvLA <- roc_auc(TEvLA, truth = TEassignment, '.pred_Block')
+TEvATL <- roc_auc(TEvATL, truth = TEassignment, '.pred_Block')
+TEvNO <- roc_auc(TEvNO, truth = TEassignment, '.pred_Block')
+TEvCLE <- roc_auc(TEvCLE, truth = TEassignment, '.pred_Block')
+TEvCAR <- roc_auc(TEvCAR, truth = TEassignment, '.pred_Block')
+TEvCHI <- roc_auc(TEvCHI, truth = TEassignment, '.pred_Block')
+TEvSF <- roc_auc(TEvSF, truth = TEassignment, '.pred_Block')
+TEvCIN <- roc_auc(TEvCIN, truth = TEassignment, '.pred_Block')
+TEvPIT <- roc_auc(TEvPIT, truth = TEassignment, '.pred_Block')
+TEvDET <- roc_auc(TEvDET, truth = TEassignment, '.pred_Block')
+TEvPHI <- roc_auc(TEvPHI, truth = TEassignment, '.pred_Block')
+TEvHOU <- roc_auc(TEvHOU, truth = TEassignment, '.pred_Block')
+TEvIND <- roc_auc(TEvIND, truth = TEassignment, '.pred_Block')
+TEvMIA <- roc_auc(TEvMIA, truth = TEassignment, '.pred_Block')
+TEvNE <- roc_auc(TEvNE, truth = TEassignment, '.pred_Block')
+TEvNYJ <- roc_auc(TEvNYJ, truth = TEassignment, '.pred_Block')
+TEvBAL <- roc_auc(TEvBAL, truth = TEassignment, '.pred_Block')
+TEvNYG <- roc_auc(TEvNYG, truth = TEassignment, '.pred_Block')
+TEvTEN <- roc_auc(TEvTEN, truth = TEassignment, '.pred_Block')
+TEvJAX <- roc_auc(TEvJAX, truth = TEassignment, '.pred_Block')
+TEvLAC <- roc_auc(TEvLAC, truth = TEassignment, '.pred_Block')
+TEvLV <- roc_auc(TEvLV, truth = TEassignment, '.pred_Block')
+TEvMIN <- roc_auc(TEvMIN, truth = TEassignment, '.pred_Block')
+TEvTB <- roc_auc(TEvTB, truth = TEassignment, '.pred_Block')
+TEvDAL <- roc_auc(TEvDAL, truth = TEassignment, '.pred_Block')
+TEvSEA <- roc_auc(TEvSEA, truth = TEassignment, '.pred_Block')
+TEvDEN <- roc_auc(TEvDEN, truth = TEassignment, '.pred_Block')
+TEvWAS <- roc_auc(TEvWAS, truth = TEassignment, '.pred_Block')
+TEvGB <- roc_auc(TEvGB, truth = TEassignment, '.pred_Block')
+
+team_vector <- c("KC", "ARI", "BUF", "LA", "ATL", "NO", "CLE", "CAR", "CHI", "SF", "CIN", "PIT", "DET", "PHI", "HOU", "IND", "MIA", "NE",  "NYJ", "BAL", "NYG", "TEN", "JAX", "LAC", "LV", "MIN", "TB",  "DAL", "SEA", "DEN", "WAS", "GB")
+roc_results_TEvs32 <- bind_rows(TEvKC, TEvARI, TEvBUF, TEvLA, TEvATL, TEvNO, TEvCLE, TEvCAR, TEvCHI, TEvSF, TEvCIN, TEvPIT, TEvDET, TEvPHI, TEvHOU, TEvIND, TEvMIA, TEvNE, TEvNYJ, TEvBAL, TEvNYG, TEvTEN, TEvJAX, TEvLAC, TEvLV, TEvMIN, TEvTB, TEvDAL, TEvSEA, TEvDEN, TEvWAS, TEvGB)
+
+# Creating overall results
+roc_results_TEvs32$Team <- team_vector
+roc_results_TEvs32 <- roc_results_TEvs32[, c('Team', '.metric', '.estimate')]
+roc_results_TEvs32 <- roc_results_TEvs32 %>% 
+  rename(Overall_Model_Accuracy = .estimate) %>% 
+  select(-.metric)
+```
+
+**\$** Plot accuracy of models
+
+```{r}
+overall_vs_team <- merge(roc_results_TEvs32, roc_final_32, by = "Team")
+
+overall_vs_team$Image <- c("https://loodibee.com/wp-content/uploads/nfl-arizona-cardinals-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-atlanta-falcons-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-baltimore-ravens-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-buffalo-bills-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-carolina-panthers-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-chicago-bears-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-cincinnati-bengals-team-logo.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-cleveland-browns-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-dallas-cowboys-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-denver-broncos-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-detroit-lions-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-green-bay-packers-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-houston-texans-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-indianapolis-colts-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-jacksonville-jaguars-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-kansas-city-chiefs-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/los-angeles-rams-2020-logo.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-los-angeles-chargers-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-oakland-raiders-team-logo.png",
+                           "https://loodibee.com/wp-content/uploads/Miami-Dolphins-Logo.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-minnesota-vikings-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-new-england-patriots-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-new-orleans-saints-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-new-york-giants-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/New-York-Jets-logo-2024.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-philadelphia-eagles-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-pittsburgh-steelers-team-logo-2-300x300.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-seattle-seahawks-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-san-francisco-49ers-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/tampa-bay-buccaneers-2020-logo.png",
+                           "https://loodibee.com/wp-content/uploads/nfl-tennessee-titans-team-logo-2.png",
+                           "https://loodibee.com/wp-content/uploads/washington-commanders-logo.png")
+
+ggplot(data = overall_vs_team, aes(x = Overall_Model_Accuracy, y = Team_Model_Accuracy)) +
+  geom_image(aes(image = Image), size = 0.12) +
+  geom_abline(aes(slope = 1,
+              intercept = 0,
+              color = "Models have Equal Accuracy")) +
+  geom_vline(xintercept = 0.9) +
+  geom_hline(yintercept = 0.9) +
+  labs(title = "Accuracy of NFL Teams",
+       x = "Overall Model",
+       y = "Team Model",
+       color = "") +
+  scale_colour_manual(values="red") +
+  annotate("text", x = 0.875, y = 0.950, label = "Q1", fontface = "bold") +
+  annotate("text", x = 0.945, y = 0.912, label = "Q2", fontface = "bold") +
+  annotate("text", x = 0.875, y = 0.825, label = "Q3", fontface = "bold") +
+  annotate("text", x = 0.925, y = 0.825, label = "Q4", fontface = "bold") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", size = 20, hjust = 0.5),
+        legend.position = c(0.1, 0.9), 
+        legend.justification = c(0, 1))
+```
+
+If below the red line the Overall Model was more accurate, if above the Team Model was more accurate
+
+Each quadrant represents if the Model did well or not predicting a specific team.
+
+-   **Q1:** Team performed well, Overall performed poorly
+-   **Q2:** Both performed well
+-   **Q3:** Both performed poorly
+-   **Q4:** Team Performed poorly, Overall performed well
+
+On average more teams are above the red line indicating that modeling by team yields better results
+
+However, the majority of teams landed in either quadrant 2 or 3 indicating that if the overall model was bad/good at predicting a team, then the team model would likely perform the same way.
+
+```{r}
+final_rf_WAS %>% extract_fit_parsnip() %>% 
+  vip(num_features = 20)
+```
+
+Means of both model approaches
+
+```{r}
+mean_overall <- mean(overall_vs_team$Overall_Model_Accuracy)
+mean_team <- mean(overall_vs_team$Team_Model_Accuracy)
+
+Mean_table <- data.frame(
+  Model = c("Team", "Overall"),
+  Mean = c(mean_team, mean_overall)
+)
+```
+
+```{r}
+ggplot(data = TE_DEN, aes(x = displayName, fill = TEassignment)) +
+  geom_bar(position = "fill") + 
+  labs(x = "Name",
+       y = "Scaled Percentage",
+       title = "Role Percentage for Denver Tight Ends",
+       fill = "TE Role") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", size = 20, hjust = 0.5))
+```
+
+Can the models predict what Eric Tomlinson is going to do on this play?
+
+```{r, eval=FALSE}
+# week 12 Arizona vs Denver
+Tomlinson_data <- data.frame(
+  gameId = 0,
+  playId = 0,
+  nflId = 0,
+  possessionTeam = "DEN",
+  quarter = 4,
+  down = 2,
+  yardsToGo = 3,
+  offenseFormation = "I_FORM",
+  receiverAlignment = "OTHER",
+  pff_passCoverage = "Red Zone",
+  inMotionAtBallSnap = FALSE,
+  shiftSinceLineset = FALSE,
+  displayName = "Eric Tomlinson",
+  DistFromBall_Wid = 5.5,
+  multipleTE = FALSE,
+  TEposition = "TEo",
+  TEAlignment = "0x1",
+  DistFromBall_RB = 7,
+  TEassignment = "Route",
+  scoreDiff = 8,
+  gameClock = 9.55,
+  OnLOS = TRUE
+)
+
+# character to factor
+Tomlinson_data <- Tomlinson_data %>% 
+  mutate_if(is.character, as.factor)
+
+# Changing downs and quarters into factors
+Tomlinson_data <- Tomlinson_data %>% 
+  mutate(
+    quarter = as.factor(quarter),
+    down = as.factor(down)
+  )
+
+# Changing all logistic variables into factors
+Tomlinson_data <- Tomlinson_data %>% 
+  mutate_if(is.logical, as.factor)
+
+# Creating Table predicting Tomlinson data
+route_prob_den <- final_rf_DEN %>% 
+  predict(Tomlinson_data, type = "prob")
+
+route_pred_den <- final_rf_DEN %>% 
+  predict(Tomlinson_data)
+
+Tom_route <- cbind(route_pred_den, route_prob_den)
+
+Tom_route$Model <- "Denver Model"
+
+route_prob_te <- final_rf_TE %>% 
+  predict(Tomlinson_data, type = "prob")
+
+route_pred_te <- final_rf_TE %>% 
+  predict(Tomlinson_data)
+
+Tom_route_te <- cbind(route_prob_te, route_pred_te)
+
+Tom_route_te$Model <- "Overall Model"
+
+Tom_route <- rbind(Tom_route, Tom_route_te)
+
+Tom_route <- Tom_route %>% 
+  relocate(Model, .before = .pred_class)
+
+
+# Creating Table predicting blocking data
+Tom_block_play <- DEN_test %>% 
+  filter(displayName == "Eric Tomlinson" & gameId == "2022102307" & playId == "2772")
+Tom_block_play$OnLOS <- "FALSE"
+
+block_prob_den <- final_rf_DEN %>% 
+  predict(Tom_block_play, type = "prob")
+
+block_prob_te <- final_rf_TE %>% 
+  predict(Tom_block_play, type = "prob")
+
+block_pred_den <- final_rf_DEN %>% 
+  predict(Tom_block_play)
+
+block_pred_te <- final_rf_TE %>% 
+  predict(Tom_block_play)
+
+Tom_block_den <- cbind(block_pred_den, block_prob_den)
+
+Tom_block_te <- cbind(block_pred_te, block_prob_te)
+
+Tom_block_den$Model <- "Denver Model"
+
+Tom_block_te$Model <- "Overall Model"
+
+Tom_block <- rbind(Tom_block_den, Tom_block_te)
+
+Tom_block <- Tom_block %>% 
+  relocate(Model, .before = .pred_class)
+
+Tom_block_play <- Tom_block_play %>% 
+  select(-c(gameId, playId, nflId, possessionTeam))
+
+
+Tom_block
+Tom_route
+```
