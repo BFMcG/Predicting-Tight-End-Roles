@@ -1,6 +1,6 @@
 # Predicting-Tight-End-Roles
 
-This Project is uses the 2025 data bowl Kaggle data set to train models that can predict what a tight ends role/assignment will be post-snap given pre-snap data.
+This Project uses the 2025 data bowl Kaggle data set to train models that can predict what a tight ends role/assignment will be post-snap given pre-snap data.
 
 Link to download csv files: https://www.kaggle.com/competitions/nfl-big-data-bowl-2025/data
 
