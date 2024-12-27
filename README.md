@@ -19,7 +19,7 @@ File Order (1 - 5)
 3) Run this file after Data Cleaning.Rmd, the file includes fitting data to Random Forest models, comparing ran models, and creating model visualizations
    
 ### EDA.Rmd
-4) Exploratory Data Analysis, only requires Data Merge.Rmd and Data Cleaning.Rmd to be run first. Analyzes the significance of parameters being considered for model creation.
+4) Exploratory Data Analysis, only requires that Data Merge.Rmd and Data Cleaning.Rmd are run first. Analyzes the significance of parameters being considered for model training.
 
 ### Model Testing.Rmd
-5) This Rmd only requires Data Merge and Data Cleaning to be run first. In this file, the cleaned data is being trained on several models including Logistic Regression, Elastic Net Regression, Support Vector Machine, Gradient Boosted Tree, and Random Forest
+5) This Rmd only requires that Data Merge and Data Cleaning are run first. In this file, the cleaned data is being trained on several models including Logistic Regression, Elastic Net Regression, Support Vector Machine, Gradient Boosted Tree, and Random Forest
