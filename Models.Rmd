@@ -781,7 +781,7 @@ save(rf_tune_KC, rf_tune_ARI, rf_tune_BUF, rf_tune_LA,
      rf_tune_NYG, rf_tune_TEN, rf_tune_JAX, rf_tune_LAC, 
      rf_tune_LV, rf_tune_MIN, rf_tune_TB, rf_tune_DAL, 
      rf_tune_SEA, rf_tune_DEN, rf_tune_WAS, rf_tune_GB, 
-     file = "/Users/brend/OneDrive/Documents/Data Bowl Notebooks/Test Files/32 tune.rda")
+     file = "file/32 tune.rda")
 ```
 
 **\$** Selecting the best forest parameters that lead to the highest ROC AUC values
@@ -836,9 +836,9 @@ roc_results_32[order(-roc_results_32$mean), ]
 
 Splitting the Data
 
-The Reasons for splitting data by previous 32 team testing data is because it allows us to compare overall model to 32 team models more accurately.
+The reason for splitting data by previous 32 team testing data is because it allows us to compare the overall model to 32 team models more accurately.
 
-Every test observation the TE overall model will predicts will be the same for the 32 team models, and we'll be able to see the difference between the model performances.
+Every test observation the TE overall model uses will be the same for the 32 team models, and we'll be able to see the difference between the model performances.
 
 ```{r}
 # 20.18% of data is in TE_test
@@ -961,7 +961,7 @@ If you choose to save fitted model
 **Replace 'file' with your file directory**
 
 ```{r, eval=FALSE}
-save(final_rf_TE, final_rf_test, file = "/Users/brend/OneDrive/Documents/Data Bowl Notebooks/Test Files/TE fit.rda")
+save(final_rf_TE, final_rf_test, file = "file/TE fit.rda")
 ```
 
 **\$** Results
