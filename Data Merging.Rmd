@@ -164,9 +164,9 @@ RB_data <- merge(RB_data, tracking_data, by = c("gameId", "playId", "nflId"))
 Saving resulting data
 *Replace 'file' with your file directory*
 ```{r}
-save(TE_data, file = "/Users/brend/OneDrive/Documents/Data Bowl/Test Files/TE data.csv")
-save(TE_data, file = "/Users/brend/OneDrive/Documents/Data Bowl/Test Files/T data.csv")
-save(TE_data, file = "/Users/brend/OneDrive/Documents/Data Bowl/Test Files/RB data.csv")
+save(TE_data, file = "file/TE data.csv")
+save(TE_data, file = "file/T data.csv")
+save(TE_data, file = "file/RB data.csv")
 ```
 
 
