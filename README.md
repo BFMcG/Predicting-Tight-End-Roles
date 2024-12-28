@@ -4,7 +4,7 @@ This project is an entry for the 2025 data bowl. It uses a Kaggle data set to tr
 
 Link to download csv files: https://www.kaggle.com/competitions/nfl-big-data-bowl-2025/data
 
-My Submission:
+My Submission: https://www.kaggle.com/code/brendanmcguinness/predicting-a-tight-end-s-role
 
 ## Files
 File Order (1 - 5)
