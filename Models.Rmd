@@ -1124,6 +1124,10 @@ final_test_GB <- augment(final_rf_GB, GB_test) %>%
   select(TEassignment, starts_with(".pred"))
 ```
 
+If you choose to save the team fitted models
+
+**Replace 'file' with your file directory**
+
 ```{r, eval=FALSE}
 save(final_rf_KC, final_test_KC, final_rf_ARI, final_test_ARI, final_rf_BUF, final_test_BUF, final_rf_LA, final_test_LA, 
      final_rf_ATL, final_test_ATL, final_rf_NO, final_test_NO, final_rf_CLE, final_test_CLE, final_rf_CAR, final_test_CAR, 
@@ -1135,9 +1139,8 @@ save(final_rf_KC, final_test_KC, final_rf_ARI, final_test_ARI, final_rf_BUF, fin
      final_rf_SEA, final_test_SEA, final_rf_DEN, final_test_DEN, final_rf_WAS, final_test_WAS, final_rf_GB, final_test_GB, 
      file = "file/32 fit.rda")
 ```
-
+**\$** accuracy for each team model
 ```{r}
-# accuracy for each team model
 KC_est <- roc_auc(final_test_KC, truth = TEassignment, '.pred_Block')
 ARI_est <- roc_auc(final_test_ARI, truth = TEassignment, '.pred_Block')
 BUF_est <- roc_auc(final_test_BUF, truth = TEassignment, '.pred_Block')
@@ -1252,6 +1255,9 @@ TEvGB <- augment(final_rf_TE, GB_test) %>%
   select(TEassignment, starts_with(".pred"))
 ```
 
+If you choose to save TE vs Team augmentation
+
+**Replace 'file' with your file directory**
 ```{r, eval=FALSE}
 save(TEvKC, TEvARI, TEvBUF, TEvLA, TEvATL, TEvNO, TEvCLE, TEvCAR, 
      TEvCHI, TEvSF, TEvCIN, TEvPIT, TEvDET, TEvPHI, TEvHOU, TEvIND, 
@@ -1260,8 +1266,8 @@ save(TEvKC, TEvARI, TEvBUF, TEvLA, TEvATL, TEvNO, TEvCLE, TEvCAR,
      file = "file/TE v Team.rda")
 ```
 
+**\$** Getting the accuracy for each team
 ```{r}
-# Getting the accuracy for each team
 TEvKC <- roc_auc(TEvKC, truth = TEassignment, '.pred_Block')
 TEvARI <- roc_auc(TEvARI, truth = TEassignment, '.pred_Block')
 TEvBUF <- roc_auc(TEvBUF, truth = TEassignment, '.pred_Block')
@@ -1379,13 +1385,13 @@ On average more teams are above the red line indicating that modeling by team yi
 
 However, the majority of teams landed in either quadrant 2 or 3 indicating that if the overall model was bad/good at predicting a team, then the team model would likely perform the same way.
 
+**\$** Commanders important features
 ```{r}
 final_rf_WAS %>% extract_fit_parsnip() %>% 
   vip(num_features = 20)
 ```
 
-Means of both model approaches
-
+**\$** Means of both model approaches
 ```{r}
 mean_overall <- mean(overall_vs_team$Overall_Model_Accuracy)
 mean_team <- mean(overall_vs_team$Team_Model_Accuracy)
@@ -1395,7 +1401,7 @@ Mean_table <- data.frame(
   Mean = c(mean_team, mean_overall)
 )
 ```
-
+**\$** Graphing Denvers TE roles (looking at Eric Tomlinson)
 ```{r}
 ggplot(data = TE_DEN, aes(x = displayName, fill = TEassignment)) +
   geom_bar(position = "fill") + 
@@ -1407,9 +1413,8 @@ ggplot(data = TE_DEN, aes(x = displayName, fill = TEassignment)) +
   theme(plot.title = element_text(face = "bold", size = 20, hjust = 0.5))
 ```
 
-Can the models predict what Eric Tomlinson is going to do on this play?
-
-```{r, eval=FALSE}
+**\$** Can the models predict what Eric Tomlinson is going to do on this play?
+```{r}
 # week 12 Arizona vs Denver
 Tomlinson_data <- data.frame(
   gameId = 0,
