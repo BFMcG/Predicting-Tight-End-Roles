@@ -9,11 +9,11 @@ My Submission: https://www.kaggle.com/code/brendanmcguinness/predicting-a-tight-
 ## Files
 File Order (1 - 5)
 
-## Required packages 
+### Required packages 
 must be installed before running files:
 dplyr, ggplot2, visdat, tidyr, tidymodels, ranger, yardstick, vip, ggimage
 
-## Additional packages for EDA and Model Testing
+### Additional packages for EDA and Model Testing
 gridExtra, glmnet, xgboost, yardstick
 
 ### Data Merging.Rmd
