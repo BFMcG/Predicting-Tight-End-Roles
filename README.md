@@ -9,6 +9,13 @@ My Submission: https://www.kaggle.com/code/brendanmcguinness/predicting-a-tight-
 ## Files
 File Order (1 - 5)
 
+## Required packages 
+must be installed before running files:
+dplyr, ggplot2, visdat, tidyr, tidymodels, ranger, yardstick, vip, ggimage
+
+## Additional packages for EDA and Model Testing
+gridExtra, glmnet, xgboost, yardstick
+
 ### Data Merging.Rmd
 1) Start with this file, make sure you've downloaded every file from Kaggle beforehand. This Rmd merges all of the data sets together and prepares them for further cleaning
 
