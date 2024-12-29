@@ -35,6 +35,7 @@ tracking_week_8 <- read.csv("file/tracking_week_8.csv")
 tracking_week_9 <- read.csv("file/tracking_week_9.csv")
 ```
 
+
 Getting player information for each relevant position
 ```{r}
 players_RB <- players %>% 
@@ -159,6 +160,30 @@ tracking_data <- tracking_data %>%
   mutate(DistFromBall_Wid = round(abs(y_bs - y_fb), digits = 2))
 ```
 
+Tracking Data for in motion
+```{r}
+# Using tracking data to get necessary variables to determine if in motion
+# Information for determining if a player is in motion (last 0.4 seconds before ball snap)
+tracking_motion <- tracking_all %>% 
+  group_by(gameId, playId, nflId) %>% 
+  filter(frameId %in% (frameId[frameType == "SNAP"] - 1:4)) %>% 
+  ungroup() %>% 
+  select(gameId, playId, nflId, frameId, frameType, x, y, s)
+
+# Removing nflId NAs (the football) obersvations
+tracking_motion <- subset(tracking_motion, !is.na(nflId))
+
+# Taking the fasted speed in the 0.4 second window, as well as the change in the y direction (move 2.5 yards)
+tracking_motion <- tracking_motion %>% 
+  group_by(gameId, playId, nflId) %>% 
+  summarize(
+    max_s = max(s),
+    yard_chg = abs(y[frameId == max(frameId)] - y[frameId == min(frameId)]),
+    .groups = "drop"
+  )
+```
+
+
 Merging tracking data with positions
 ```{r}
 TE_data <- merge(TE_data, tracking_data, by = c("gameId", "playId", "nflId"))
@@ -168,13 +193,15 @@ G_data <- merge(G_data, tracking_data, by = c("gameId", "playId", "nflId"))
 ```
 
 Saving resulting data
-*Replace 'file' with your file directory*
+
+**Replace 'file' with your file directory**
 ```{r}
 write.csv(TE_data, file = "file/TE data.csv", row.names = FALSE)
 write.csv(T_data, file = "file/T data.csv", row.names = FALSE)
-write.csv(TB_data, file = "file/RB data.csv", row.names = FALSE)
 write.csv(G_data, file = "file/G data.csv", row.names = FALSE)
-write.csv(tracking_data, file = "file/tracking data.csv", row.names = FALSE)
+write.csv(RB_data, file = "file/RB data.csv", row.names = FALSE)
+write.csv(tracking_motion, file = "file/tracking motion.csv", row.names = FALSE)
+```
 ```
 
 
