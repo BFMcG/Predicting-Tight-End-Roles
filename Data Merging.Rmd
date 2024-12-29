@@ -49,6 +49,10 @@ players_T <- players %>%
   select(nflId, position, displayName) %>% 
   filter(position == "T")
 
+players_G <- players %>% 
+  select(nflId, position, displayName) %>% 
+  filter(position == "G")
+
 # Getting player_play information
 player_play_c <- player_play %>% 
   select(gameId, playId, nflId, hadRushAttempt, inMotionAtBallSnap, shiftSinceLineset, wasRunningRoute, wasTargettedReceiver, routeRan, blockedPlayerNFLId1, blockedPlayerNFLId2, blockedPlayerNFLId3)
@@ -57,6 +61,7 @@ player_play_c <- player_play %>%
 RB_data <- merge(player_play_c, players_RB, by = "nflId")
 TE_data <- merge(player_play_c, players_TE, by = "nflId")
 T_data <- merge(player_play_c, players_T, by = "nflId")
+G_data <- merge(player_play_c, players_G, by = "nflId")
 ```
 
 Merging play and game data with TE data
@@ -159,14 +164,17 @@ Merging tracking data with positions
 TE_data <- merge(TE_data, tracking_data, by = c("gameId", "playId", "nflId"))
 T_data <- merge(T_data, tracking_data, by = c("gameId", "playId", "nflId"))
 RB_data <- merge(RB_data, tracking_data, by = c("gameId", "playId", "nflId"))
+G_data <- merge(G_data, tracking_data, by = c("gameId", "playId", "nflId"))
 ```
 
 Saving resulting data
 *Replace 'file' with your file directory*
 ```{r}
 write.csv(TE_data, file = "file/TE data.csv", row.names = FALSE)
-write.csv(TE_data, file = "file/T data.csv", row.names = FALSE)
-write.csv(TE_data, file = "file/RB data.csv", row.names = FALSE)
+write.csv(T_data, file = "file/T data.csv", row.names = FALSE)
+write.csv(TB_data, file = "file/RB data.csv", row.names = FALSE)
+write.csv(G_data, file = "file/G data.csv", row.names = FALSE)
+write.csv(tracking_data, file = "file/tracking data.csv", row.names = FALSE)
 ```
 
 
