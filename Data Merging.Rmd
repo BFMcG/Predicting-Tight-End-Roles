@@ -202,7 +202,3 @@ write.csv(G_data, file = "file/G data.csv", row.names = FALSE)
 write.csv(RB_data, file = "file/RB data.csv", row.names = FALSE)
 write.csv(tracking_motion, file = "file/tracking motion.csv", row.names = FALSE)
 ```
-```
-
-
-
